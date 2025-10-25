@@ -1,7 +1,7 @@
 // ignore_for_file: use_build_context_synchronously
 
 import 'package:buddy/utils/colors.dart';
-import 'package:buddy/views/screens/home_screen.dart';
+import 'package:buddy/views/screens/bottomnavbarscreen/bottom_navbar_screen.dart';
 import 'package:buddy/views/screens/onboarding/onborading_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,7 +28,7 @@ class _SplashScreenState extends State<SplashScreen> {
       if (isloggedin) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => HomeScreen()),
+          MaterialPageRoute(builder: (context) => BottomNavbarScreen()),
         );
       } else {
         Navigator.pushReplacement(

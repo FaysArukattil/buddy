@@ -1,6 +1,6 @@
 // ignore_for_file: use_build_context_synchronously
 
-import 'package:buddy/views/screens/home_screen.dart';
+import 'package:buddy/views/screens/bottomnavbarscreen/bottom_navbar_screen.dart';
 import 'package:buddy/views/screens/onboarding/login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:buddy/utils/colors.dart';
@@ -57,7 +57,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => HomeScreen()),
+        MaterialPageRoute(builder: (context) => BottomNavbarScreen()),
       );
     }
   }

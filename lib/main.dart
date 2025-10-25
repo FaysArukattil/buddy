@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'views/screens/splashscreen/splash_screen.dart';
+import 'views/screens/onboarding/splashscreen/splash_screen.dart';
 import 'utils/colors.dart';
 
 void main() {

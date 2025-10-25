@@ -1,4 +1,4 @@
-import 'package:buddy/views/screens/home_screen.dart';
+import 'package:buddy/views/screens/bottomnavbarscreen/bottom_navbar_screen.dart';
 import 'package:buddy/views/screens/onboarding/signup_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:buddy/utils/colors.dart';
@@ -37,7 +37,7 @@ class _LoginScreenState extends State<LoginScreen> {
       Navigator.pushReplacement(
         // ignore: use_build_context_synchronously
         context,
-        MaterialPageRoute(builder: (context) => HomeScreen()),
+        MaterialPageRoute(builder: (context) => BottomNavbarScreen()),
       );
     }
   }
