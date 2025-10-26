@@ -4,6 +4,7 @@ import 'package:buddy/utils/colors.dart';
 import 'package:buddy/views/screens/bottomnavbarscreen/home_screen.dart';
 import 'package:buddy/views/screens/bottomnavbarscreen/statistics_screen.dart';
 import 'package:buddy/views/screens/bottomnavbarscreen/profile_screen.dart';
+import 'package:buddy/views/screens/add_transaction_screen.dart';
 
 class BottomNavbarScreen extends StatefulWidget {
   const BottomNavbarScreen({super.key});
@@ -12,7 +13,8 @@ class BottomNavbarScreen extends StatefulWidget {
   State<BottomNavbarScreen> createState() => _BottomNavbarScreenState();
 }
 
-class _BottomNavbarScreenState extends State<BottomNavbarScreen> {
+class _BottomNavbarScreenState extends State<BottomNavbarScreen>
+    with SingleTickerProviderStateMixin {
   late final PageController _pageController;
   int _currentIndex = 0;
   double _page = 0;
@@ -20,6 +22,8 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen> {
   double _dragIndicatorPage = 0;
   double _dragStartPage = 0;
   double _dragAccumX = 0;
+  late final AnimationController _fabController;
+  late final Animation<double> _fabBob;
 
   @override
   void initState() {
@@ -29,11 +33,21 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen> {
       final p = _pageController.page ?? _currentIndex.toDouble();
       if (p != _page) setState(() => _page = p);
     });
+    _fabController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    );
+    _fabBob = Tween<double>(
+      begin: -6.0,
+      end: 6.0,
+    ).animate(CurvedAnimation(parent: _fabController, curve: Curves.easeInOut));
+    _fabController.repeat(reverse: true);
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    _fabController.dispose();
     super.dispose();
   }
 
@@ -48,11 +62,7 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen> {
             controller: _pageController,
             physics: const BouncingScrollPhysics(),
             onPageChanged: (i) => setState(() => _currentIndex = i),
-            children: const [
-              HomeScreen(),
-              StatisticsScreen(),
-              ProfileScreen(),
-            ],
+            children: const [HomeScreen(), StatisticsScreen(), ProfileScreen()],
           ),
 
           // Glassmorphic bottom bar
@@ -71,12 +81,22 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen> {
                     child: Container(
                       decoration: BoxDecoration(
                         color: AppColors.primary.withValues(alpha: 0.14),
-                        border: Border.all(color: AppColors.secondary.withValues(alpha: 0.24), width: 1),
+                        border: Border.all(
+                          color: AppColors.secondary.withValues(alpha: 0.24),
+                          width: 1,
+                        ),
                         boxShadow: const [
-                          BoxShadow(color: Color(0x11000000), blurRadius: 20, offset: Offset(0, -4)),
+                          BoxShadow(
+                            color: Color(0x11000000),
+                            blurRadius: 20,
+                            offset: Offset(0, -4),
+                          ),
                         ],
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 6,
+                      ),
                       child: LayoutBuilder(
                         builder: (context, constraints) {
                           final totalWidth = constraints.maxWidth;
@@ -84,10 +104,16 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen> {
                           final itemWidth = totalWidth / itemCount;
                           final indicatorWidth = itemWidth - 8;
 
-                          final animatedLeft = (_dragging
-                                  ? (_dragIndicatorPage.clamp(0, itemCount - 1) * itemWidth)
-                                  : (_page.clamp(0, itemCount - 1) * itemWidth))
-                              + 4;
+                          final animatedLeft =
+                              (_dragging
+                                  ? (_dragIndicatorPage.clamp(
+                                          0,
+                                          itemCount - 1,
+                                        ) *
+                                        itemWidth)
+                                  : (_page.clamp(0, itemCount - 1) *
+                                        itemWidth)) +
+                              4;
 
                           return GestureDetector(
                             behavior: HitTestBehavior.translucent,
@@ -102,13 +128,18 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen> {
                             onPanUpdate: (details) {
                               _dragAccumX += details.delta.dx;
                               final deltaPages = _dragAccumX / itemWidth;
-                              final double newPage = (_dragStartPage + deltaPages)
-                                  .clamp(0.0, (itemCount - 1).toDouble());
+                              final double newPage =
+                                  (_dragStartPage + deltaPages).clamp(
+                                    0.0,
+                                    (itemCount - 1).toDouble(),
+                                  );
                               setState(() {
                                 _dragIndicatorPage = newPage;
                               });
-                              if (_pageController.hasClients && _pageController.position.haveDimensions) {
-                                final w = _pageController.position.viewportDimension;
+                              if (_pageController.hasClients &&
+                                  _pageController.position.haveDimensions) {
+                                final w =
+                                    _pageController.position.viewportDimension;
                                 _pageController.position.jumpTo(newPage * w);
                               }
                             },
@@ -130,18 +161,26 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen> {
                                     width: indicatorWidth,
                                     height: 40,
                                     child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 120),
+                                      duration: const Duration(
+                                        milliseconds: 120,
+                                      ),
                                       curve: Curves.easeOut,
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(14),
                                         gradient: LinearGradient(
                                           colors: [
-                                            AppColors.primary.withValues(alpha: 0.38),
-                                            AppColors.secondary.withValues(alpha: 0.30),
+                                            AppColors.primary.withValues(
+                                              alpha: 0.38,
+                                            ),
+                                            AppColors.secondary.withValues(
+                                              alpha: 0.30,
+                                            ),
                                           ],
                                         ),
                                         border: Border.all(
-                                          color: AppColors.secondary.withValues(alpha: 0.35),
+                                          color: AppColors.secondary.withValues(
+                                            alpha: 0.35,
+                                          ),
                                           width: 1,
                                         ),
                                       ),
@@ -178,7 +217,8 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen> {
                                         child: Center(
                                           child: _NavIcon(
                                             icon: Icons.person_rounded,
-                                            outline: Icons.person_outline_rounded,
+                                            outline:
+                                                Icons.person_outline_rounded,
                                             selected: (_page.round() == 2),
                                             onTap: () => _goTo(2),
                                           ),
@@ -191,6 +231,64 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen> {
                             ),
                           );
                         },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Animated themed FAB above navbar (rendered last to be on top)
+          Positioned.fill(
+            child: Align(
+              alignment: Alignment.bottomRight,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 110, right: 20),
+                child: AnimatedBuilder(
+                  animation: _fabBob,
+                  builder: (context, child) => Transform.translate(
+                    offset: Offset(0, _fabBob.value),
+                    child: child,
+                  ),
+                  child: GestureDetector(
+                    onTap: () {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (ctx) {
+                          return FractionallySizedBox(
+                            heightFactor: 0.85,
+                            child: ClipRRect(
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(20),
+                              ),
+                              child: Material(
+                                color: AppColors.background,
+                                child: const AddTransactionScreen(),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                    child: Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.88),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x33000000),
+                            blurRadius: 16,
+                            offset: Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: const Center(
+                        child: Icon(Icons.add, size: 28, color: Colors.white),
                       ),
                     ),
                   ),
@@ -235,7 +333,8 @@ class _NavIcon extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 180),
-          transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+          transitionBuilder: (child, anim) =>
+              ScaleTransition(scale: anim, child: child),
           child: Icon(
             selected ? icon : outline,
             key: ValueKey<bool>(selected),
@@ -247,4 +346,3 @@ class _NavIcon extends StatelessWidget {
     );
   }
 }
-
