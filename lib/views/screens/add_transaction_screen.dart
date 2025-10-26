@@ -19,6 +19,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
   double _dragStartPage = 0;
   double _dragAccumX = 0;
   bool _showCategories = false;
+  String _categoryQuery = '';
 
   final TextEditingController _noteController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
@@ -652,12 +653,38 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                                 Column(
                                   children: [
                                     const SizedBox(height: 12),
+                                    TextField(
+                                      decoration: InputDecoration(
+                                        hintText: 'Search categories',
+                                        prefixIcon: const Icon(Icons.search_rounded),
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        border: const OutlineInputBorder(
+                                          borderRadius: BorderRadius.all(Radius.circular(12)),
+                                        ),
+                                        suffixIcon: _categoryQuery.isNotEmpty
+                                            ? InkWell(
+                                                onTap: () => setState(() => _categoryQuery = ''),
+                                                child: const Icon(Icons.close_rounded),
+                                              )
+                                            : null,
+                                      ),
+                                      onChanged: (v) => setState(() => _categoryQuery = v.trim()),
+                                    ),
+                                    const SizedBox(height: 12),
                                     _InlineCategoryGrid(
                                       current: _selectedCategory,
-                                      options: _currentCategories,
+                                      options: (() {
+                                        final list = _currentCategories
+                                            .where((c) => c.name.toLowerCase().contains(_categoryQuery.toLowerCase()))
+                                            .toList();
+                                        list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                                        return list;
+                                      })(),
                                       onChanged: (val) => setState(() {
                                         _selectedCategory = val;
                                         _showCategories = false;
+                                        _categoryQuery = '';
                                       }),
                                       onAddNew: (created) => setState(() {
                                         if (_typeIndex == 0) {
@@ -665,10 +692,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                                             created,
                                           );
                                         } else {
-                                          _defaultIncomeCategories.add(created);
+                                          _defaultIncomeCategories.add(
+                                            created,
+                                          );
                                         }
                                         _selectedCategory = created;
                                         _showCategories = false;
+                                        _categoryQuery = '';
                                       }),
                                     ),
                                   ],
@@ -825,6 +855,7 @@ class _InlineCategoryGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Auto-wrapping layout sized by content to avoid overflows
     final tiles = <Widget>[
       _buildAddTile(context),
       ...options.map((opt) => _buildOption(context, opt)),
@@ -832,7 +863,6 @@ class _InlineCategoryGrid extends StatelessWidget {
     return Wrap(
       spacing: 10,
       runSpacing: 10,
-      alignment: WrapAlignment.start,
       children: tiles,
     );
   }
@@ -897,7 +927,7 @@ class _InlineCategoryGrid extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 120),
+                constraints: const BoxConstraints(maxWidth: 220),
                 child: Text(
                   opt.name,
                   maxLines: 1,

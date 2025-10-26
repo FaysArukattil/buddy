@@ -22,7 +22,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
   void initState() {
     super.initState();
     _bobController = AnimationController(vsync: this, duration: const Duration(seconds: 2));
-    _bobAnimation = Tween<double>(begin: -6.0, end: 6.0)
+    _bobAnimation = Tween<double>(begin: -10.0, end: 10.0)
         .animate(CurvedAnimation(parent: _bobController, curve: Curves.easeInOut));
     _bobController.repeat(reverse: true);
   }
@@ -36,10 +36,39 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
   @override
   Widget build(BuildContext context) {
     final Color accent = _isIncome ? AppColors.income : AppColors.expense;
-    final String amountPrefix = _isIncome ? '+' : '-';
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: AnimatedBuilder(
+            animation: _bobAnimation,
+            builder: (context, child) => Transform.translate(
+              offset: Offset(0, -_bobAnimation.value / 2),
+              child: child,
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.88),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  elevation: 8,
+                  shadowColor: const Color(0x33000000),
+                ),
+                onPressed: () {},
+                child: const Text(
+                  'Download',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
       body: Stack(
         children: [
           Positioned(child: Image.asset(AppImages.curvedBackground, fit: BoxFit.cover)),
@@ -85,7 +114,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                   ),
                 ),
 
-                const SizedBox(height: 16),
+                const SizedBox(height: 28),
 
                 Expanded(
                   child: SingleChildScrollView(
@@ -103,9 +132,8 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                             ),
                             child: Container(
                               decoration: BoxDecoration(
-                                color: AppColors.cardBackground,
+                                color: AppColors.primary.withValues(alpha: 0.88),
                                 borderRadius: BorderRadius.circular(24),
-                                border: Border.all(color: Colors.white70, width: 1),
                                 boxShadow: const [
                                   BoxShadow(
                                     color: Color(0x33000000),
@@ -114,15 +142,15 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                                   ),
                                 ],
                               ),
-                              padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+                              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
                               child: Row(
                                 children: [
                                   CircleAvatar(
-                                    radius: 24,
+                                    radius: 28,
                                     backgroundColor: Colors.white,
                                     child: _avatarChild(widget.data),
                                   ),
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 14),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -132,50 +160,56 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                               decoration: BoxDecoration(
-                                                color: accent.withOpacity(0.12),
+                                                color: Colors.white,
                                                 borderRadius: BorderRadius.circular(20),
-                                                border: Border.all(color: accent.withOpacity(0.35)),
+                                                border: Border.all(color: Colors.white, width: 1),
                                               ),
                                               child: Text(
                                                 _isIncome ? 'Income' : 'Expense',
-                                                style: TextStyle(color: accent, fontWeight: FontWeight.w600, fontSize: 12),
+                                                style: TextStyle(color: accent, fontWeight: FontWeight.w700, fontSize: 12),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          (widget.data['title'] as String?) ?? 'Transaction',
+                                          maxLines: 2,
+                                          overflow: TextOverflow.fade,
+                                          style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        // Category - fully visible and larger
+                                        Row(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Icon(Icons.category_rounded, size: 16, color: Colors.white70),
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: Text(
+                                                (widget.data['category'] as String?) ?? '-',
+                                                softWrap: true,
+                                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
                                               ),
                                             ),
                                           ],
                                         ),
                                         const SizedBox(height: 6),
-                                        Text(
-                                          (widget.data['title'] as String?) ?? 'Transaction',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-                                        ),
-                                        const SizedBox(height: 4),
+                                        // Time and Date row
                                         Row(
                                           children: [
-                                            Icon(Icons.category_rounded, size: 14, color: AppColors.textSecondary),
-                                            const SizedBox(width: 4),
-                                            Flexible(
-                                              child: Text(
-                                                (widget.data['category'] as String?) ?? '-',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Icon(Icons.access_time_rounded, size: 14, color: AppColors.textSecondary),
+                                            Icon(Icons.access_time_rounded, size: 14, color: Colors.white70),
                                             const SizedBox(width: 4),
                                             Text(
                                               (widget.data['time'] as String?) ?? '-',
-                                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                                              style: const TextStyle(color: Colors.white70, fontSize: 12),
                                             ),
                                             const SizedBox(width: 10),
-                                            Icon(Icons.event_rounded, size: 14, color: AppColors.textSecondary),
+                                            Icon(Icons.event_rounded, size: 14, color: Colors.white70),
                                             const SizedBox(width: 4),
                                             Text(
                                               _formatDate((widget.data['date'] as DateTime?) ?? DateTime.now()),
-                                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                                              style: const TextStyle(color: Colors.white70, fontSize: 12),
                                             ),
                                           ],
                                         ),
@@ -206,7 +240,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                                 ),
                               ],
                             ),
-                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -223,60 +257,31 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                                 _detailRow('Note', (widget.data['note'] as String?)?.trim().isNotEmpty == true
                                     ? widget.data['note'] as String
                                     : '-'),
+                                const SizedBox(height: 14),
+                                Center(
+                                  child: TweenAnimationBuilder<double>(
+                                    tween: Tween(begin: 0, end: (widget.data['amount'] as double?) ?? 0),
+                                    duration: const Duration(milliseconds: 800),
+                                    curve: Curves.easeOutCubic,
+                                    builder: (context, value, _) {
+                                      return Text(
+                                        '${_isIncome ? '+' : '-'}${_formatCurrency(value)}',
+                                        style: TextStyle(
+                                          fontSize: 30,
+                                          fontWeight: FontWeight.w800,
+                                          color: _isIncome ? AppColors.income : AppColors.expense,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
                               ],
                             ),
                           ),
                         ),
 
-                        const SizedBox(height: 20),
-
-                        // Big amount centered before download
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Text(
-                            '$amountPrefix${_formatCurrency((widget.data['amount'] as double?) ?? 0)}',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 30,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 14),
-
-                        // Animated themed Download button
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: AnimatedBuilder(
-                            animation: _bobAnimation,
-                            builder: (context, child) => Transform.translate(
-                              offset: Offset(0, _bobAnimation.value / 2),
-                              child: child,
-                            ),
-                            child: SizedBox(
-                              width: double.infinity,
-                              height: 54,
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary.withValues(alpha: 0.88),
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                  elevation: 8,
-                                  shadowColor: const Color(0x33000000),
-                                ),
-                                onPressed: () {},
-                                child: const Text(
-                                  'Download',
-                                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 120),
                       ],
                     ),
                   ),

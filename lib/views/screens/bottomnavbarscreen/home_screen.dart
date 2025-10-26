@@ -13,7 +13,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   String _displayName = '';
   double _totalBalance = 0;
   double _income = 0;
@@ -121,7 +121,64 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   @override
+  bool get wantKeepAlive => true;
+
+  IconData _iconForNote(String? note) {
+    final n = (note ?? '').toLowerCase();
+    if (n.contains('coffee') || n.contains('cafe') || n.contains('drink') || n.contains('food') || n.contains('snack')) {
+      return Icons.fastfood_rounded;
+    }
+    if (n.contains('fuel') || n.contains('petrol') || n.contains('gas')) {
+      return Icons.local_gas_station_rounded;
+    }
+    if (n.contains('uber') || n.contains('taxi') || n.contains('cab')) {
+      return Icons.local_taxi_rounded;
+    }
+    if (n.contains('rent') || n.contains('home')) {
+      return Icons.home_rounded;
+    }
+    if (n.contains('phone') || n.contains('mobile')) {
+      return Icons.phone_android_rounded;
+    }
+    if (n.contains('netflix') || n.contains('hotstar') || n.contains('youtube') || n.contains('movie')) {
+      return Icons.movie_rounded;
+    }
+    if (n.contains('gym') || n.contains('fitness')) {
+      return Icons.fitness_center_rounded;
+    }
+    if (n.contains('gift')) {
+      return Icons.card_giftcard_rounded;
+    }
+    if (n.contains('refund')) {
+      return Icons.reply_rounded;
+    }
+    if (n.contains('salary') || n.contains('upwork') || n.contains('payment') || n.contains('pay')) {
+      return Icons.payments_rounded;
+    }
+    if (n.contains('travel') || n.contains('flight') || n.contains('trip')) {
+      return Icons.flight_rounded;
+    }
+    if (n.contains('shop') || n.contains('shopping') || n.contains('grocer')) {
+      return Icons.shopping_bag_rounded;
+    }
+    if (n.contains('pet')) {
+      return Icons.pets_rounded;
+    }
+    if (n.contains('medical') || n.contains('doctor') || n.contains('hospital')) {
+      return Icons.medical_services_rounded;
+    }
+    if (n.contains('school') || n.contains('tuition') || n.contains('education')) {
+      return Icons.school_rounded;
+    }
+    if (n.contains('game') || n.contains('esports')) {
+      return Icons.sports_esports_rounded;
+    }
+    return Icons.receipt_long_rounded;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
@@ -312,6 +369,7 @@ class _HomeScreenState extends State<HomeScreen>
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     child: Container(
+                      key: _txSectionKey,
                       decoration: BoxDecoration(
                         color: AppColors.cardBackground,
                         borderRadius: BorderRadius.circular(16),
@@ -362,12 +420,10 @@ class _HomeScreenState extends State<HomeScreen>
                                         ),
                                       ),
                                       alignment: Alignment.center,
-                                      child: Text(
-                                        (tx['avatarText'] as String?)?.toUpperCase() ?? '?',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          color: AppColors.secondary,
-                                        ),
+                                      child: Icon(
+                                        _iconForNote(tx['note'] as String?),
+                                        size: 20,
+                                        color: AppColors.secondary,
                                       ),
                                     ),
                                     const SizedBox(width: 12),
