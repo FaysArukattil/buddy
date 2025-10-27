@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:buddy/utils/colors.dart';
+import 'package:buddy/repositories/transaction_repository.dart';
 
 class AddTransactionScreen extends StatefulWidget {
-  const AddTransactionScreen({super.key});
+  final Map<String, dynamic>? existingTransaction;
+
+  const AddTransactionScreen({super.key, this.existingTransaction});
 
   @override
   State<AddTransactionScreen> createState() => _AddTransactionScreenState();
@@ -67,6 +70,33 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
       end: 6.0,
     ).animate(CurvedAnimation(parent: _bobController, curve: Curves.easeInOut));
     _bobController.repeat(reverse: true);
+
+    // Pre-fill if editing
+    if (widget.existingTransaction != null) {
+      final tx = widget.existingTransaction!;
+      _amountController.text = (tx['amount'] as double).toStringAsFixed(2);
+      _noteController.text = tx['note'] as String? ?? '';
+      _selectedDate = tx['date'] as DateTime;
+      final type = (tx['type'] as String).toLowerCase();
+      _typeIndex = type == 'income' ? 1 : 0;
+      _page = _typeIndex.toDouble();
+
+      // Find matching category
+      final catName = tx['category'] as String;
+      final iconCode = tx['icon'] as int?;
+      final cats = type == 'income'
+          ? _defaultIncomeCategories
+          : _defaultExpenseCategories;
+      _selectedCategory = cats.firstWhere(
+        (c) => c.name == catName,
+        orElse: () => iconCode != null
+            ? _CategoryOption(
+                catName,
+                IconData(iconCode, fontFamily: 'MaterialIcons'),
+              )
+            : cats.first,
+      );
+    }
   }
 
   @override
@@ -361,11 +391,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Text(
-                      'Add Transaction',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
+                    Expanded(
+                      child: Text(
+                        widget.existingTransaction != null ? 'Edit Transaction' : 'Add Transaction',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
@@ -504,7 +536,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
               Expanded(
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
-                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
                   child: AnimatedPadding(
                     duration: const Duration(milliseconds: 200),
                     curve: Curves.easeOut,
@@ -664,29 +697,53 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                                     TextField(
                                       decoration: InputDecoration(
                                         hintText: 'Search categories',
-                                        prefixIcon: const Icon(Icons.search_rounded),
+                                        prefixIcon: const Icon(
+                                          Icons.search_rounded,
+                                        ),
                                         isDense: true,
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 10,
+                                            ),
                                         border: const OutlineInputBorder(
-                                          borderRadius: BorderRadius.all(Radius.circular(12)),
+                                          borderRadius: BorderRadius.all(
+                                            Radius.circular(12),
+                                          ),
                                         ),
                                         suffixIcon: _categoryQuery.isNotEmpty
                                             ? InkWell(
-                                                onTap: () => setState(() => _categoryQuery = ''),
-                                                child: const Icon(Icons.close_rounded),
+                                                onTap: () => setState(
+                                                  () => _categoryQuery = '',
+                                                ),
+                                                child: const Icon(
+                                                  Icons.close_rounded,
+                                                ),
                                               )
                                             : null,
                                       ),
-                                      onChanged: (v) => setState(() => _categoryQuery = v.trim()),
+                                      onChanged: (v) => setState(
+                                        () => _categoryQuery = v.trim(),
+                                      ),
                                     ),
                                     const SizedBox(height: 12),
                                     _InlineCategoryGrid(
                                       current: _selectedCategory,
                                       options: (() {
                                         final list = _currentCategories
-                                            .where((c) => c.name.toLowerCase().contains(_categoryQuery.toLowerCase()))
+                                            .where(
+                                              (c) =>
+                                                  c.name.toLowerCase().contains(
+                                                    _categoryQuery
+                                                        .toLowerCase(),
+                                                  ),
+                                            )
                                             .toList();
-                                        list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                                        list.sort(
+                                          (a, b) => a.name
+                                              .toLowerCase()
+                                              .compareTo(b.name.toLowerCase()),
+                                        );
                                         return list;
                                       })(),
                                       onChanged: (val) => setState(() {
@@ -700,9 +757,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                                             created,
                                           );
                                         } else {
-                                          _defaultIncomeCategories.add(
-                                            created,
-                                          );
+                                          _defaultIncomeCategories.add(created);
                                         }
                                         _selectedCategory = created;
                                         _showCategories = false;
@@ -780,27 +835,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                                 elevation: 8,
                                 shadowColor: const Color(0x33000000),
                               ),
-                              onPressed: () {
-                                final payload = {
-                                  'type': _typeIndex == 0
-                                      ? 'expense'
-                                      : 'income',
-                                  'amount': _amountController.text.trim(),
-                                  'category': _selectedCategory?.name,
-                                  'note': _noteController.text.trim(),
-                                  'dateTime': DateTime(
-                                    _selectedDate.year,
-                                    _selectedDate.month,
-                                    _selectedDate.day,
-                                    DateTime.now().hour,
-                                    DateTime.now().minute,
-                                    DateTime.now().second,
-                                    DateTime.now().millisecond,
-                                    DateTime.now().microsecond,
-                                  ).toIso8601String(),
-                                };
-                                Navigator.of(context).pop(payload);
-                              },
+                              onPressed: _saveTransaction,
                               child: Text(
                                 _typeIndex == 0 ? 'Add Expense' : 'Add Income',
                                 style: const TextStyle(
@@ -820,6 +855,93 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _saveTransaction() async {
+    final String amountStr = _amountController.text.trim();
+    if (amountStr.isEmpty) {
+      _showError('Please enter an amount');
+      return;
+    }
+    final double? amount = double.tryParse(amountStr);
+    if (amount == null) {
+      _showError('Invalid amount');
+      return;
+    }
+    if (amount == 0) {
+      _showError('Amount cannot be zero');
+      return;
+    }
+    if (_selectedCategory == null) {
+      _showError('Please select a category');
+      return;
+    }
+
+    final type = _typeIndex == 0 ? 'expense' : 'income';
+    final category = _selectedCategory!.name;
+    final iconCodePoint = _selectedCategory!.icon.codePoint;
+    final note = _noteController.text.trim().isEmpty
+        ? null
+        : _noteController.text.trim();
+
+    final repo = TransactionRepository();
+    try {
+      if (widget.existingTransaction != null) {
+        // Update existing
+        final id = widget.existingTransaction!['id'] as int;
+        final map = <String, Object?>{
+          'amount': amount.abs(),
+          'type': type,
+          'date': _selectedDate.toIso8601String(),
+          'note': note,
+          'category': category,
+          'icon': iconCodePoint,
+        };
+        await repo.update(id, map);
+        if (!mounted) return;
+        _showSuccess('Transaction updated successfully');
+      } else {
+        // Insert new
+        await repo.add(
+          amount: amount.abs(),
+          type: type,
+          date: _selectedDate,
+          note: note,
+          category: category,
+          iconCodePoint: iconCodePoint,
+        );
+        if (!mounted) return;
+        _showSuccess('Transaction saved successfully');
+      }
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      _showError('Failed to save transaction');
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.expense,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showSuccess(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.income,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(milliseconds: 800),
       ),
     );
   }
@@ -868,11 +990,7 @@ class _InlineCategoryGrid extends StatelessWidget {
       _buildAddTile(context),
       ...options.map((opt) => _buildOption(context, opt)),
     ];
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: tiles,
-    );
+    return Wrap(spacing: 10, runSpacing: 10, children: tiles);
   }
 
   Widget _buildAddTile(BuildContext context) {

@@ -2,6 +2,8 @@ import 'package:buddy/utils/images.dart';
 import 'package:buddy/utils/colors.dart';
 import 'package:buddy/views/screens/bottomnavbarscreen/profile_screen.dart';
 import 'package:buddy/views/screens/transaction_detail_screen.dart';
+import 'package:buddy/views/screens/filtered_transactions_screen.dart';
+import 'package:buddy/repositories/transaction_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,40 +24,17 @@ class _HomeScreenState extends State<HomeScreen>
   late final Animation<double> _bobAnimation;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _txSectionKey = GlobalKey();
-  bool _showRecentBadge = false;
-  final List<Map<String, dynamic>> _dummyTransactions = [
-    {
-      'type': 'income',
-      'title': 'Upwork Escrow',
-      'subtitle': 'Invoice #UP-2043',
-      'amount': 850.00,
-      'time': '10:00 AM',
-      'date': DateTime(2022, 2, 28),
-      'category': 'Salary',
-      'note': 'Payment from Upwork',
-      'earnings': 870.00,
-      'fee': 20.00,
-      'avatarText': 'Up',
-    },
-    {
-      'type': 'expense',
-      'title': 'Claire Jovalski',
-      'subtitle': 'Coffee Meetup',
-      'amount': 85.00,
-      'time': '04:30 PM',
-      'date': DateTime(2024, 2, 29),
-      'category': 'Food & Drinks',
-      'note': 'Coffee and snacks',
-      'spending': 85.00,
-      'fee': 0.99,
-      'avatarText': 'CJ',
-    },
-  ];
+  final bool _showRecentBadge = false;
+  final List<Map<String, dynamic>> _transactions = [];
+  late final TransactionRepository _repo;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _loadUser();
+    _repo = TransactionRepository();
+    _refreshFromDb();
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
@@ -67,20 +46,58 @@ class _HomeScreenState extends State<HomeScreen>
     _controller.repeat(reverse: true);
   }
 
-  void _goToRecent() async {
-    if (_txSectionKey.currentContext == null) return;
-    setState(() => _showRecentBadge = true);
-    await Future.delayed(const Duration(milliseconds: 50));
-    final box = _txSectionKey.currentContext!.findRenderObject() as RenderBox;
-    final offset = box.localToGlobal(Offset.zero);
-    final target = _scrollController.offset + offset.dy - 100;
-    _scrollController.animateTo(
-      target.clamp(0, _scrollController.position.maxScrollExtent),
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeOutCubic,
+  Future<void> _refreshFromDb() async {
+    setState(() => _isLoading = true);
+    final rows = await _repo.getAll();
+    rows.sort(
+      (a, b) => (DateTime.parse(
+        b['date'] as String,
+      )).compareTo(DateTime.parse(a['date'] as String)),
     );
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _showRecentBadge = false);
+
+    // Calculate current month totals only
+    final now = DateTime.now();
+    double income = 0, expense = 0;
+    for (final r in rows) {
+      final dt = DateTime.tryParse(r['date'] as String) ?? now;
+      if (dt.year == now.year && dt.month == now.month) {
+        final amt = (r['amount'] as num).toDouble();
+        final type = (r['type'] as String).toLowerCase();
+        if (type == 'income') {
+          income += amt;
+        } else {
+          expense += amt;
+        }
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _transactions
+        ..clear()
+        ..addAll(
+          rows.take(10).map((r) {
+            final dt = DateTime.tryParse(r['date'] as String) ?? DateTime.now();
+            return {
+              'type': r['type'],
+              'title': (r['note'] as String?)?.isNotEmpty == true
+                  ? r['note']
+                  : r['category'],
+              'subtitle': r['category'],
+              'amount': (r['amount'] as num).toDouble(),
+              'time': _formatTime(dt),
+              'date': dt,
+              'category': r['category'],
+              'note': r['note'],
+              'avatarText': (r['category'] as String?)?.substring(0, 1) ?? '?',
+              'icon': r['icon'],
+              'id': r['id'],
+            };
+          }),
+        );
+      _income = income;
+      _expenses = expense;
+      _totalBalance = income - expense;
+      _isLoading = false;
     });
   }
 
@@ -93,20 +110,10 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _loadUser() async {
     final prefs = await SharedPreferences.getInstance();
-    final email = prefs.getString('email') ?? '';
-    // Use first portion of email (before '@').
-    String firstPart = '';
-    if (email.contains('@')) {
-      firstPart = email.split('@').first;
-    } else {
-      firstPart = email;
-    }
-    // Capitalize first letter for nicer display
-    if (firstPart.isNotEmpty) {
-      firstPart = firstPart[0].toUpperCase() + firstPart.substring(1);
-    }
+    final savedName = prefs.getString('name')?.trim() ?? '';
+    final display = savedName.isNotEmpty ? savedName : 'Guest';
     setState(() {
-      _displayName = firstPart;
+      _displayName = display;
       _totalBalance = 0;
       _income = 0;
       _expenses = 0;
@@ -125,7 +132,11 @@ class _HomeScreenState extends State<HomeScreen>
 
   IconData _iconForNote(String? note) {
     final n = (note ?? '').toLowerCase();
-    if (n.contains('coffee') || n.contains('cafe') || n.contains('drink') || n.contains('food') || n.contains('snack')) {
+    if (n.contains('coffee') ||
+        n.contains('cafe') ||
+        n.contains('drink') ||
+        n.contains('food') ||
+        n.contains('snack')) {
       return Icons.fastfood_rounded;
     }
     if (n.contains('fuel') || n.contains('petrol') || n.contains('gas')) {
@@ -140,7 +151,10 @@ class _HomeScreenState extends State<HomeScreen>
     if (n.contains('phone') || n.contains('mobile')) {
       return Icons.phone_android_rounded;
     }
-    if (n.contains('netflix') || n.contains('hotstar') || n.contains('youtube') || n.contains('movie')) {
+    if (n.contains('netflix') ||
+        n.contains('hotstar') ||
+        n.contains('youtube') ||
+        n.contains('movie')) {
       return Icons.movie_rounded;
     }
     if (n.contains('gym') || n.contains('fitness')) {
@@ -152,7 +166,10 @@ class _HomeScreenState extends State<HomeScreen>
     if (n.contains('refund')) {
       return Icons.reply_rounded;
     }
-    if (n.contains('salary') || n.contains('upwork') || n.contains('payment') || n.contains('pay')) {
+    if (n.contains('salary') ||
+        n.contains('upwork') ||
+        n.contains('payment') ||
+        n.contains('pay')) {
       return Icons.payments_rounded;
     }
     if (n.contains('travel') || n.contains('flight') || n.contains('trip')) {
@@ -164,10 +181,14 @@ class _HomeScreenState extends State<HomeScreen>
     if (n.contains('pet')) {
       return Icons.pets_rounded;
     }
-    if (n.contains('medical') || n.contains('doctor') || n.contains('hospital')) {
+    if (n.contains('medical') ||
+        n.contains('doctor') ||
+        n.contains('hospital')) {
       return Icons.medical_services_rounded;
     }
-    if (n.contains('school') || n.contains('tuition') || n.contains('education')) {
+    if (n.contains('school') ||
+        n.contains('tuition') ||
+        n.contains('education')) {
       return Icons.school_rounded;
     }
     if (n.contains('game') || n.contains('esports')) {
@@ -289,7 +310,18 @@ class _HomeScreenState extends State<HomeScreen>
                               children: [
                                 Expanded(
                                   child: GestureDetector(
-                                    onTap: _goToRecent,
+                                    onTap: () async {
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const FilteredTransactionsScreen(
+                                                type: 'Income',
+                                              ),
+                                        ),
+                                      );
+                                      if (mounted) await _refreshFromDb();
+                                    },
                                     child: _statTile(
                                       label: 'Income',
                                       value: _income,
@@ -300,11 +332,25 @@ class _HomeScreenState extends State<HomeScreen>
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
-                                  child: _statTile(
-                                    label: 'Expenses',
-                                    value: _expenses,
-                                    color: AppColors.expense,
-                                    icon: Icons.arrow_upward_rounded,
+                                  child: GestureDetector(
+                                    onTap: () async {
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const FilteredTransactionsScreen(
+                                                type: 'Expense',
+                                              ),
+                                        ),
+                                      );
+                                      if (mounted) await _refreshFromDb();
+                                    },
+                                    child: _statTile(
+                                      label: 'Expenses',
+                                      value: _expenses,
+                                      color: AppColors.expense,
+                                      icon: Icons.arrow_upward_rounded,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -336,12 +382,21 @@ class _HomeScreenState extends State<HomeScreen>
                             if (_showRecentBadge)
                               Container(
                                 key: _txSectionKey,
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
                                 margin: const EdgeInsets.only(right: 8),
                                 decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(alpha: 0.10),
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.10,
+                                  ),
                                   borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: AppColors.secondary.withValues(alpha: 0.35)),
+                                  border: Border.all(
+                                    color: AppColors.secondary.withValues(
+                                      alpha: 0.35,
+                                    ),
+                                  ),
                                 ),
                                 child: const Text(
                                   'Recent',
@@ -375,147 +430,276 @@ class _HomeScreenState extends State<HomeScreen>
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Colors.white70, width: 1),
                         boxShadow: const [
-                          BoxShadow(color: Color(0x33000000), blurRadius: 12, offset: Offset(0, 6)),
+                          BoxShadow(
+                            color: Color(0x33000000),
+                            blurRadius: 12,
+                            offset: Offset(0, 6),
+                          ),
                         ],
                       ),
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                        itemCount: _dummyTransactions.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final tx = _dummyTransactions[index];
-                          final isIncome = tx['type'] == 'income';
-                          final amountColor = isIncome ? AppColors.income : AppColors.expense;
-                          return Material(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(14),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(14),
-                              onTap: () async {
-                                final page = await _buildTransactionDetailPage(tx);
-                                // ignore: use_build_context_synchronously
-                                Navigator.push(context, MaterialPageRoute(builder: (_) => page));
-                              },
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: Colors.white70),
+                      child: _isLoading
+                          ? const Padding(
+                              padding: EdgeInsets.all(40),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  color: AppColors.primary,
                                 ),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 40,
-                                      height: 40,
+                              ),
+                            )
+                          : _transactions.isEmpty
+                          ? Padding(
+                              padding: const EdgeInsets.all(40),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.receipt_long_rounded,
+                                    size: 64,
+                                    color: Colors.grey.shade400,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'No transactions yet',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.grey.shade600,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Tap + to add your first transaction',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 8,
+                                horizontal: 8,
+                              ),
+                              itemCount: _transactions.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 8),
+                              itemBuilder: (context, index) {
+                                final tx = _transactions[index];
+                                final isIncome = tx['type'] == 'income';
+                                final amountColor = isIncome
+                                    ? AppColors.income
+                                    : AppColors.expense;
+                                return Material(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(14),
+                                    onTap: () async {
+                                      final page =
+                                          await _buildTransactionDetailPage(tx);
+                                      // ignore: use_build_context_synchronously
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(builder: (_) => page),
+                                      );
+                                      if (mounted) await _refreshFromDb();
+                                    },
+                                    child: Container(
                                       decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(12),
-                                        gradient: LinearGradient(
-                                          colors: isIncome
-                                              ? [AppColors.income.withOpacity(0.15), Colors.white]
-                                              : [AppColors.expense.withOpacity(0.15), Colors.white],
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
+                                        borderRadius: BorderRadius.circular(14),
+                                        border: Border.all(
+                                          color: Colors.white70,
                                         ),
                                       ),
-                                      alignment: Alignment.center,
-                                      child: Icon(
-                                        _iconForNote(tx['note'] as String?),
-                                        size: 20,
-                                        color: AppColors.secondary,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
                                       ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                      child: Row(
                                         children: [
-                                          Row(
-                                            children: [
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: amountColor.withOpacity(0.12),
-                                                  borderRadius: BorderRadius.circular(999),
-                                                  border: Border.all(color: amountColor.withOpacity(0.35)),
-                                                ),
-                                                child: Text(
-                                                  isIncome ? 'Income' : 'Expense',
-                                                  style: TextStyle(color: amountColor, fontSize: 10, fontWeight: FontWeight.w600),
-                                                ),
+                                          Container(
+                                            width: 40,
+                                            height: 40,
+                                            decoration: BoxDecoration(
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              gradient: LinearGradient(
+                                                colors: isIncome
+                                                    ? [
+                                                        AppColors.income
+                                                            .withOpacity(0.15),
+                                                        Colors.white,
+                                                      ]
+                                                    : [
+                                                        AppColors.expense
+                                                            .withOpacity(0.15),
+                                                        Colors.white,
+                                                      ],
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
                                               ),
-                                              const SizedBox(width: 6),
-                                              Expanded(
-                                                child: Text(
-                                                  tx['title'] as String,
+                                            ),
+                                            alignment: Alignment.center,
+                                            child: Icon(
+                                              _iconForNote(
+                                                tx['note'] as String?,
+                                              ),
+                                              size: 20,
+                                              color: AppColors.secondary,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Container(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 2,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color: amountColor
+                                                            .withOpacity(0.12),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              999,
+                                                            ),
+                                                        border: Border.all(
+                                                          color: amountColor
+                                                              .withOpacity(
+                                                                0.35,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                      child: Text(
+                                                        isIncome
+                                                            ? 'Income'
+                                                            : 'Expense',
+                                                        style: TextStyle(
+                                                          color: amountColor,
+                                                          fontSize: 10,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Expanded(
+                                                      child: Text(
+                                                        tx['title'] as String,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: const TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color: AppColors
+                                                              .textPrimary,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  tx['subtitle'] as String,
                                                   maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                   style: const TextStyle(
-                                                    fontWeight: FontWeight.w700,
-                                                    color: AppColors.textPrimary,
+                                                    color:
+                                                        AppColors.textSecondary,
+                                                    fontSize: 12,
                                                   ),
                                                 ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            tx['subtitle'] as String,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Row(
-                                            children: [
-                                              Icon(Icons.category_rounded, size: 12, color: AppColors.textLight),
-                                              const SizedBox(width: 4),
-                                              Flexible(
-                                                child: Text(
-                                                  (tx['category'] as String?) ?? '-',
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: const TextStyle(color: AppColors.textLight, fontSize: 11),
+                                                const SizedBox(height: 2),
+                                                Row(
+                                                  children: [
+                                                    Icon(
+                                                      Icons.category_rounded,
+                                                      size: 12,
+                                                      color:
+                                                          AppColors.textLight,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Flexible(
+                                                      child: Text(
+                                                        (tx['category']
+                                                                as String?) ??
+                                                            '-',
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: const TextStyle(
+                                                          color: AppColors
+                                                              .textLight,
+                                                          fontSize: 11,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.end,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                (isIncome ? '+' : '-') +
+                                                    _formatCurrency(
+                                                      tx['amount'] as double,
+                                                    ),
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                  color: amountColor,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Row(
+                                                children: [
+                                                  Text(
+                                                    _formatTxDate(
+                                                      tx['date'] as DateTime,
+                                                    ),
+                                                    style: const TextStyle(
+                                                      fontSize: 11,
+                                                      color:
+                                                          AppColors.textLight,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    tx['time'] as String,
+                                                    style: const TextStyle(
+                                                      fontSize: 11,
+                                                      color:
+                                                          AppColors.textLight,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ],
                                           ),
                                         ],
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          (isIncome ? '+' : '-') + _formatCurrency(tx['amount'] as double),
-                                          style: TextStyle(fontWeight: FontWeight.w800, color: amountColor),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Row(
-                                          children: [
-                                            Text(
-                                              _formatTxDate(tx['date'] as DateTime),
-                                              style: const TextStyle(fontSize: 11, color: AppColors.textLight),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              tx['time'] as String,
-                                              style: const TextStyle(fontSize: 11, color: AppColors.textLight),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
+                                  ),
+                                );
+                              },
                             ),
-                          );
-                        },
-                      ),
                     ),
                   ),
 
@@ -536,9 +720,28 @@ class _HomeScreenState extends State<HomeScreen>
 
   String _formatTxDate(DateTime d) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[d.month - 1]} ${d.day}, ${d.year}';
+  }
+
+  String _formatTime(DateTime d) {
+    final hour = d.hour;
+    final minute = d.minute.toString().padLeft(2, '0');
+    final ampm = hour >= 12 ? 'PM' : 'AM';
+    final h12 = hour % 12 == 0 ? 12 : hour % 12;
+    return '$h12:$minute $ampm';
   }
 
   Future<Widget> _buildTransactionDetailPage(Map<String, dynamic> tx) async {

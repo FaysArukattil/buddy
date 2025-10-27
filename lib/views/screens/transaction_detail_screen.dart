@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:buddy/utils/colors.dart';
 import 'package:buddy/utils/images.dart';
-import 'package:flutter/animation.dart';
+import 'package:buddy/repositories/transaction_repository.dart';
+import 'package:buddy/views/screens/add_transaction_screen.dart';
 
 class TransactionDetailScreen extends StatefulWidget {
   final Map<String, dynamic> data;
   const TransactionDetailScreen({super.key, required this.data});
 
   @override
-  State<TransactionDetailScreen> createState() => _TransactionDetailScreenState();
+  State<TransactionDetailScreen> createState() =>
+      _TransactionDetailScreenState();
 }
 
 class _TransactionDetailScreenState extends State<TransactionDetailScreen>
@@ -21,9 +23,14 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
   @override
   void initState() {
     super.initState();
-    _bobController = AnimationController(vsync: this, duration: const Duration(seconds: 2));
-    _bobAnimation = Tween<double>(begin: -10.0, end: 10.0)
-        .animate(CurvedAnimation(parent: _bobController, curve: Curves.easeInOut));
+    _bobController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    );
+    _bobAnimation = Tween<double>(
+      begin: -10.0,
+      end: 10.0,
+    ).animate(CurvedAnimation(parent: _bobController, curve: Curves.easeInOut));
     _bobController.repeat(reverse: true);
   }
 
@@ -55,7 +62,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary.withValues(alpha: 0.88),
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   elevation: 8,
                   shadowColor: const Color(0x33000000),
                 ),
@@ -71,7 +80,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
       ),
       body: Stack(
         children: [
-          Positioned(child: Image.asset(AppImages.curvedBackground, fit: BoxFit.cover)),
+          Positioned(
+            child: Image.asset(AppImages.curvedBackground, fit: BoxFit.cover),
+          ),
           SafeArea(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -89,12 +100,17 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                             color: AppColors.primary.withValues(alpha: 0.14),
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: AppColors.secondary.withValues(alpha: 0.24),
+                              color: AppColors.secondary.withValues(
+                                alpha: 0.24,
+                              ),
                               width: 1,
                             ),
                           ),
                           padding: const EdgeInsets.all(10),
-                          child: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                          child: const Icon(
+                            Icons.arrow_back_rounded,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -109,7 +125,19 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                           ),
                         ),
                       ),
-                      const SizedBox(width: 42),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            onPressed: _openEdit,
+                            icon: const Icon(Icons.edit_outlined, color: Colors.white),
+                          ),
+                          IconButton(
+                            onPressed: _confirmDelete,
+                            icon: const Icon(Icons.delete_outline_rounded, color: Colors.white),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -132,7 +160,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                             ),
                             child: Container(
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.88),
+                                color: AppColors.primary.withValues(
+                                  alpha: 0.88,
+                                ),
                                 borderRadius: BorderRadius.circular(24),
                                 boxShadow: const [
                                   BoxShadow(
@@ -142,7 +172,12 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                                   ),
                                 ],
                               ),
-                              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                              padding: const EdgeInsets.fromLTRB(
+                                20,
+                                20,
+                                20,
+                                16,
+                              ),
                               child: Row(
                                 children: [
                                   CircleAvatar(
@@ -153,43 +188,73 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                                   const SizedBox(width: 14),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Row(
                                           children: [
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 4,
+                                                  ),
                                               decoration: BoxDecoration(
                                                 color: Colors.white,
-                                                borderRadius: BorderRadius.circular(20),
-                                                border: Border.all(color: Colors.white, width: 1),
+                                                borderRadius:
+                                                    BorderRadius.circular(20),
+                                                border: Border.all(
+                                                  color: Colors.white,
+                                                  width: 1,
+                                                ),
                                               ),
                                               child: Text(
-                                                _isIncome ? 'Income' : 'Expense',
-                                                style: TextStyle(color: accent, fontWeight: FontWeight.w700, fontSize: 12),
+                                                _isIncome
+                                                    ? 'Income'
+                                                    : 'Expense',
+                                                style: TextStyle(
+                                                  color: accent,
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 12,
+                                                ),
                                               ),
                                             ),
                                           ],
                                         ),
                                         const SizedBox(height: 8),
                                         Text(
-                                          (widget.data['title'] as String?) ?? 'Transaction',
+                                          (widget.data['title'] as String?) ??
+                                              'Transaction',
                                           maxLines: 2,
                                           overflow: TextOverflow.fade,
-                                          style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                          ),
                                         ),
                                         const SizedBox(height: 8),
                                         // Category - fully visible and larger
                                         Row(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            Icon(Icons.category_rounded, size: 16, color: Colors.white70),
+                                            Icon(
+                                              Icons.category_rounded,
+                                              size: 16,
+                                              color: Colors.white70,
+                                            ),
                                             const SizedBox(width: 6),
                                             Expanded(
                                               child: Text(
-                                                (widget.data['category'] as String?) ?? '-',
+                                                (widget.data['category']
+                                                        as String?) ??
+                                                    '-',
                                                 softWrap: true,
-                                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
                                               ),
                                             ),
                                           ],
@@ -198,18 +263,38 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                                         // Time and Date row
                                         Row(
                                           children: [
-                                            Icon(Icons.access_time_rounded, size: 14, color: Colors.white70),
+                                            Icon(
+                                              Icons.access_time_rounded,
+                                              size: 14,
+                                              color: Colors.white70,
+                                            ),
                                             const SizedBox(width: 4),
                                             Text(
-                                              (widget.data['time'] as String?) ?? '-',
-                                              style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                              (widget.data['time']
+                                                      as String?) ??
+                                                  '-',
+                                              style: const TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 12,
+                                              ),
                                             ),
                                             const SizedBox(width: 10),
-                                            Icon(Icons.event_rounded, size: 14, color: Colors.white70),
+                                            Icon(
+                                              Icons.event_rounded,
+                                              size: 14,
+                                              color: Colors.white70,
+                                            ),
                                             const SizedBox(width: 4),
                                             Text(
-                                              _formatDate((widget.data['date'] as DateTime?) ?? DateTime.now()),
-                                              style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                              _formatDate(
+                                                (widget.data['date']
+                                                        as DateTime?) ??
+                                                    DateTime.now(),
+                                              ),
+                                              style: const TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 12,
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -231,7 +316,10 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                             decoration: BoxDecoration(
                               color: AppColors.cardBackground,
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white70, width: 1),
+                              border: Border.all(
+                                color: Colors.white70,
+                                width: 1,
+                              ),
                               boxShadow: const [
                                 BoxShadow(
                                   color: Color(0x33000000),
@@ -246,21 +334,52 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                               children: [
                                 const Text(
                                   'Transaction details',
-                                  style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textPrimary,
+                                  ),
                                 ),
                                 const SizedBox(height: 10),
-                                _detailRow('Status', _isIncome ? 'Income' : 'Expense',
-                                    valueColor: _isIncome ? AppColors.income : AppColors.expense),
-                                _detailRow('Category', (widget.data['category'] as String?) ?? '-'),
-                                _detailRow('Time', (widget.data['time'] as String?) ?? '-'),
-                                _detailRow('Date', _formatDate((widget.data['date'] as DateTime?) ?? DateTime.now())),
-                                _detailRow('Note', (widget.data['note'] as String?)?.trim().isNotEmpty == true
-                                    ? widget.data['note'] as String
-                                    : '-'),
+                                _detailRow(
+                                  'Status',
+                                  _isIncome ? 'Income' : 'Expense',
+                                  valueColor: _isIncome
+                                      ? AppColors.income
+                                      : AppColors.expense,
+                                ),
+                                _detailRow(
+                                  'Category',
+                                  (widget.data['category'] as String?) ?? '-',
+                                ),
+                                _detailRow(
+                                  'Time',
+                                  (widget.data['time'] as String?) ?? '-',
+                                ),
+                                _detailRow(
+                                  'Date',
+                                  _formatDate(
+                                    (widget.data['date'] as DateTime?) ??
+                                        DateTime.now(),
+                                  ),
+                                ),
+                                _detailRow(
+                                  'Note',
+                                  (widget.data['note'] as String?)
+                                              ?.trim()
+                                              .isNotEmpty ==
+                                          true
+                                      ? widget.data['note'] as String
+                                      : '-',
+                                ),
                                 const SizedBox(height: 14),
                                 Center(
                                   child: TweenAnimationBuilder<double>(
-                                    tween: Tween(begin: 0, end: (widget.data['amount'] as double?) ?? 0),
+                                    tween: Tween(
+                                      begin: 0,
+                                      end:
+                                          (widget.data['amount'] as double?) ??
+                                          0,
+                                    ),
                                     duration: const Duration(milliseconds: 800),
                                     curve: Curves.easeOutCubic,
                                     builder: (context, value, _) {
@@ -269,7 +388,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                                         style: TextStyle(
                                           fontSize: 30,
                                           fontWeight: FontWeight.w800,
-                                          color: _isIncome ? AppColors.income : AppColors.expense,
+                                          color: _isIncome
+                                              ? AppColors.income
+                                              : AppColors.expense,
                                         ),
                                       );
                                     },
@@ -298,11 +419,19 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
     final String text = (data['avatarText'] as String? ?? '?').toUpperCase();
     return Text(
       text,
-      style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.secondary),
+      style: const TextStyle(
+        fontWeight: FontWeight.w800,
+        color: AppColors.secondary,
+      ),
     );
   }
 
-  Widget _detailRow(String label, String value, {Color? valueColor, bool isBold = false}) {
+  Widget _detailRow(
+    String label,
+    String value, {
+    Color? valueColor,
+    bool isBold = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
@@ -326,9 +455,57 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
   }
 
   String _formatDate(DateTime dt) {
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
   }
 
-  String _formatCurrency(double v) => '\$' + v.toStringAsFixed(2);
+  String _formatCurrency(double v) => '\$${v.toStringAsFixed(2)}';
+
+  Future<void> _openEdit() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AddTransactionScreen(existingTransaction: widget.data),
+      ),
+    );
+    if (result == true && mounted) {
+      Navigator.of(context).pop(true);
+    }
+  }
+
+  Future<void> _confirmDelete() async {
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete transaction?'),
+        content: const Text('This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    final id = widget.data['id'];
+    if (id is int) {
+      final repo = TransactionRepository();
+      await repo.delete(id);
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    }
+  }
 }

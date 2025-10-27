@@ -3,6 +3,7 @@ import 'dart:ui';
 // ignore: depend_on_referenced_packages
 import 'package:fl_chart/fl_chart.dart';
 import 'package:buddy/utils/colors.dart';
+import 'package:buddy/repositories/transaction_repository.dart';
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
@@ -14,40 +15,130 @@ class StatisticsScreen extends StatefulWidget {
 class _StatisticsScreenState extends State<StatisticsScreen> {
   int _selectedTab = 0;
   String _type = 'Expense';
-
   final List<String> _tabs = const ['Day', 'Week', 'Month', 'Year'];
 
-  final Map<int, List<double>> _dataPoints = {
-    0: [300, 500, 400, 700, 600, 800, 650],
-    1: [200, 450, 350, 600, 500, 700, 550],
-    2: [200, 350, 250, 600, 400, 700, 550, 620],
-    3: [300, 400, 350, 550, 500, 650, 600, 700, 650, 750, 720, 800],
-  };
+  late final TransactionRepository _repo;
+  List<Map<String, Object?>> _rows = [];
 
-  final Map<int, List<String>> _labels = {
-    0: ['6AM', '9AM', '12PM', '3PM', '6PM', '9PM', '12AM'],
-    1: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-    2: ['Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'],
-    3: [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ],
-  };
+  @override
+  void initState() {
+    super.initState();
+    _repo = TransactionRepository();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final rows = await _repo.getAll();
+    if (!mounted) return;
+    setState(() => _rows = rows);
+  }
+
+  List<double> _computePoints() {
+    final isIncome = _type.toLowerCase() == 'income';
+    final now = DateTime.now();
+    switch (_selectedTab) {
+      case 0: // Day: 24 hours
+        final buckets = List<double>.filled(24, 0);
+        for (final r in _rows) {
+          final type = (r['type'] as String).toLowerCase();
+          if ((isIncome && type != 'income') || (!isIncome && type != 'expense')) continue;
+          final dt = DateTime.tryParse(r['date'] as String) ?? now;
+          if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+            buckets[dt.hour] += (r['amount'] as num).toDouble();
+          }
+        }
+        return buckets;
+      case 1: // Week: Mon..Sun
+        final buckets = List<double>.filled(7, 0);
+        final startOfWeek = now.subtract(Duration(days: (now.weekday - 1) % 7));
+        for (final r in _rows) {
+          final type = (r['type'] as String).toLowerCase();
+          if ((isIncome && type != 'income') || (!isIncome && type != 'expense')) continue;
+          final dt = DateTime.tryParse(r['date'] as String) ?? now;
+          final start = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
+          final end = start.add(const Duration(days: 7));
+          if (dt.isAfter(start.subtract(const Duration(milliseconds: 1))) && dt.isBefore(end)) {
+            final idx = (dt.weekday - 1) % 7;
+            buckets[idx] += (r['amount'] as num).toDouble();
+          }
+        }
+        return buckets;
+      case 2: // Month: 1..N days
+        final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+        final buckets = List<double>.filled(daysInMonth, 0);
+        for (final r in _rows) {
+          final type = (r['type'] as String).toLowerCase();
+          if ((isIncome && type != 'income') || (!isIncome && type != 'expense')) continue;
+          final dt = DateTime.tryParse(r['date'] as String) ?? now;
+          if (dt.year == now.year && dt.month == now.month) {
+            buckets[dt.day - 1] += (r['amount'] as num).toDouble();
+          }
+        }
+        return buckets;
+      default: // Year: Jan..Dec
+        final buckets = List<double>.filled(12, 0);
+        for (final r in _rows) {
+          final type = (r['type'] as String).toLowerCase();
+          if ((isIncome && type != 'income') || (!isIncome && type != 'expense')) continue;
+          final dt = DateTime.tryParse(r['date'] as String) ?? now;
+          if (dt.year == now.year) {
+            buckets[dt.month - 1] += (r['amount'] as num).toDouble();
+          }
+        }
+        return buckets;
+    }
+  }
+
+  List<String> _computeLabels() {
+    switch (_selectedTab) {
+      case 0:
+        return List.generate(24, (i) => '${i}:00');
+      case 1:
+        return const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      case 2:
+        final now = DateTime.now();
+        final days = DateTime(now.year, now.month + 1, 0).day;
+        return List.generate(days, (i) => '${i + 1}');
+      default:
+        return const ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    }
+  }
+
+  double _computeTotal() {
+    return _computePoints().fold(0.0, (sum, val) => sum + val);
+  }
+
+  List<Map<String, dynamic>> _computeTopCategories() {
+    final isIncome = _type.toLowerCase() == 'income';
+    final categoryTotals = <String, double>{};
+    
+    for (final r in _rows) {
+      final type = (r['type'] as String).toLowerCase();
+      if ((isIncome && type != 'income') || (!isIncome && type != 'expense')) continue;
+      
+      final cat = r['category'] as String;
+      final amt = (r['amount'] as num).toDouble();
+      categoryTotals[cat] = (categoryTotals[cat] ?? 0) + amt;
+    }
+    
+    final sorted = categoryTotals.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    
+    return sorted.take(5).map((e) => {
+      'category': e.key,
+      'amount': e.value,
+    }).toList();
+  }
+
+  String _formatCurrency(double v) => '\$${v.toStringAsFixed(2)}';
 
   @override
   Widget build(BuildContext context) {
-    final points = _dataPoints[_selectedTab]!;
-    final labels = _labels[_selectedTab]!;
+    final points = _computePoints();
+    final labels = _computeLabels();
+    final total = _computeTotal();
+    final topCategories = _computeTopCategories();
+    final hasData = points.any((p) => p > 0);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -301,6 +392,68 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       ),
                     ),
 
+                    const SizedBox(height: 16),
+
+                    // Total display
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              _type == 'Income' ? AppColors.income : AppColors.expense,
+                              (_type == 'Income' ? AppColors.income : AppColors.expense).withOpacity(0.7),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: (_type == 'Income' ? AppColors.income : AppColors.expense).withOpacity(0.3),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Total ${_type}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _tabs[_selectedTab],
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.9),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              _formatCurrency(total),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
                     const SizedBox(height: 20),
 
                     // Chart with fl_chart
@@ -343,7 +496,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                 16,
                                 16,
                               ),
-                              child: LineChart(
+                              child: hasData ? LineChart(
                                 LineChartData(
                                   gridData: FlGridData(
                                     show: true,
@@ -403,9 +556,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                   minX: 0,
                                   maxX: (points.length - 1).toDouble(),
                                   minY: 0,
-                                  maxY:
-                                      points.reduce((a, b) => a > b ? a : b) *
-                                      1.2,
+                                  maxY: hasData
+                                      ? points.reduce((a, b) => a > b ? a : b) * 1.2
+                                      : 10,
                                   lineBarsData: [
                                     LineChartBarData(
                                       spots: List.generate(
@@ -482,6 +635,27 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                 ),
                                 duration: const Duration(milliseconds: 800),
                                 curve: Curves.easeOutCubic,
+                              )
+                            : Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.show_chart_rounded,
+                                      size: 64,
+                                      color: Colors.grey.shade400,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'No data for this period',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.grey.shade600,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -489,194 +663,114 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 24),
-
-                    // Top Spending header
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Top Spending',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
+                    if (topCategories.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      // Top Categories
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Top ${_type == 'Expense' ? 'Spending' : 'Earning'} Categories',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
                             ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(
-                              Icons.filter_list_rounded,
-                              color: AppColors.primary,
-                              size: 20,
-                            ),
-                          ),
-                        ],
+                            const SizedBox(height: 12),
+                            ...topCategories.map((cat) {
+                              final percentage = total > 0 ? (cat['amount'] as double) / total * 100 : 0;
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.05),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: (_type == 'Income' ? AppColors.income : AppColors.expense).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Icon(
+                                        Icons.category_rounded,
+                                        color: _type == 'Income' ? AppColors.income : AppColors.expense,
+                                        size: 24,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            cat['category'] as String,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 15,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(4),
+                                            child: LinearProgressIndicator(
+                                              value: percentage / 100,
+                                              backgroundColor: Colors.grey.shade200,
+                                              valueColor: AlwaysStoppedAnimation(
+                                                _type == 'Income' ? AppColors.income : AppColors.expense,
+                                              ),
+                                              minHeight: 6,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          _formatCurrency(cat['amount'] as double),
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 16,
+                                            color: _type == 'Income' ? AppColors.income : AppColors.expense,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '${percentage.toStringAsFixed(1)}%',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.textLight,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
 
-                    const SizedBox(height: 16),
-
-                    // Spending list
-                    _spendTile(
-                      context,
-                      leading: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.green.shade100,
-                              Colors.green.shade50,
-                            ],
-                          ),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.local_cafe_rounded,
-                          color: AppColors.secondary,
-                          size: 24,
-                        ),
-                      ),
-                      title: 'Starbucks',
-                      subtitle: 'Jan 12, 2022',
-                      amount: -150,
-                      highlight: false,
-                    ),
-                    _spendTile(
-                      context,
-                      leading: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              AppColors.primary.withValues(alpha: 0.2),
-                              AppColors.primary.withValues(alpha: 0.1),
-                            ],
-                          ),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.swap_horiz_rounded,
-                          color: AppColors.primary,
-                          size: 24,
-                        ),
-                      ),
-                      title: 'Transfer',
-                      subtitle: 'Yesterday',
-                      amount: 85,
-                      highlight: true,
-                    ),
-                    _spendTile(
-                      context,
-                      leading: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Colors.red.shade100, Colors.red.shade50],
-                          ),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.play_circle_filled_rounded,
-                          color: Colors.redAccent,
-                          size: 24,
-                        ),
-                      ),
-                      title: 'Youtube',
-                      subtitle: 'Jan 16, 2022',
-                      amount: -11.99,
-                      highlight: false,
-                    ),
-
-                    const SizedBox(height: 80),
+                    const SizedBox(height: 40),
                   ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _spendTile(
-    BuildContext context, {
-    required Widget leading,
-    required String title,
-    required String subtitle,
-    required double amount,
-    bool highlight = false,
-  }) {
-    final amtStr =
-        '${amount < 0 ? '- ' : '+ '}\$${amount.abs().toStringAsFixed(2)}';
-    final amtColor = amount < 0 ? AppColors.expense : AppColors.income;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: highlight ? AppColors.secondary : Colors.transparent,
-            width: 2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: highlight
-                  ? AppColors.secondary.withValues(alpha: 0.2)
-                  : Colors.black.withValues(alpha: 0.06),
-              blurRadius: highlight ? 12 : 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            leading,
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: amtColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                amtStr,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: amtColor,
-                  fontSize: 14,
                 ),
               ),
             ),

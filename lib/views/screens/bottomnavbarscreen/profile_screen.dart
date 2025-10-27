@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:buddy/utils/colors.dart';
 import 'package:buddy/utils/images.dart';
+import 'package:buddy/repositories/transaction_repository.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -56,8 +57,20 @@ class _ProfileScreenState extends State<ProfileScreen>
     final email = prefs.getString('email') ?? '';
     final savedName = prefs.getString('name');
     final imgPath = prefs.getString('profile_image_path');
-    final income = prefs.getDouble('total_income') ?? 0.0;
-    final expense = prefs.getDouble('total_expense') ?? 0.0;
+    
+    // Load all-time totals from database
+    final repo = TransactionRepository();
+    final rows = await repo.getAll();
+    double income = 0, expense = 0;
+    for (final r in rows) {
+      final amt = (r['amount'] as num).toDouble();
+      final type = (r['type'] as String).toLowerCase();
+      if (type == 'income') {
+        income += amt;
+      } else {
+        expense += amt;
+      }
+    }
 
     String displayName = savedName ?? '';
     if (displayName.isEmpty && email.isNotEmpty) {
