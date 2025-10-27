@@ -599,7 +599,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                                     width: 40,
                                     alignment: Alignment.center,
                                     child: const Text(
-                                      '\$',
+                                      '₹',
                                       style: TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.w600,
@@ -647,7 +647,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                                   padding: const EdgeInsets.all(14),
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: Colors.black26),
+                                    border: Border.all(
+                                      color: _showCategories 
+                                          ? AppColors.primary.withOpacity(0.5)
+                                          : Colors.black26,
+                                      width: _showCategories ? 2 : 1,
+                                    ),
+                                    color: _showCategories
+                                        ? AppColors.primary.withOpacity(0.05)
+                                        : Colors.transparent,
                                   ),
                                   child: Row(
                                     mainAxisAlignment:
@@ -692,82 +700,107 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                                   ),
                                 ),
                               ),
-                              if (_showCategories)
-                                Column(
-                                  children: [
-                                    const SizedBox(height: 12),
-                                    TextField(
-                                      decoration: InputDecoration(
-                                        hintText: 'Search categories',
-                                        prefixIcon: const Icon(
-                                          Icons.search_rounded,
-                                        ),
-                                        isDense: true,
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 10,
-                                            ),
-                                        border: const OutlineInputBorder(
-                                          borderRadius: BorderRadius.all(
-                                            Radius.circular(12),
-                                          ),
-                                        ),
-                                        suffixIcon: _categoryQuery.isNotEmpty
-                                            ? InkWell(
-                                                onTap: () => setState(
-                                                  () => _categoryQuery = '',
-                                                ),
-                                                child: const Icon(
-                                                  Icons.close_rounded,
-                                                ),
-                                              )
-                                            : null,
-                                      ),
-                                      onChanged: (v) => setState(
-                                        () => _categoryQuery = v.trim(),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    _InlineCategoryGrid(
-                                      current: _selectedCategory,
-                                      options: (() {
-                                        final list = _currentCategories
-                                            .where(
-                                              (c) =>
-                                                  c.name.toLowerCase().contains(
-                                                    _categoryQuery
-                                                        .toLowerCase(),
+                              AnimatedSize(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                                child: _showCategories
+                                    ? Column(
+                                        children: [
+                                          const SizedBox(height: 16),
+                                          TextField(
+                                            decoration: InputDecoration(
+                                              hintText: 'Search categories',
+                                              prefixIcon: const Icon(
+                                                Icons.search_rounded,
+                                                color: AppColors.primary,
+                                              ),
+                                              isDense: true,
+                                              contentPadding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 10,
                                                   ),
-                                            )
-                                            .toList();
-                                        list.sort(
-                                          (a, b) => a.name
-                                              .toLowerCase()
-                                              .compareTo(b.name.toLowerCase()),
-                                        );
-                                        return list;
-                                      })(),
-                                      onChanged: (val) => setState(() {
-                                        _selectedCategory = val;
-                                        _showCategories = false;
-                                        _categoryQuery = '';
-                                      }),
-                                      onAddNew: (created) => setState(() {
-                                        if (_typeIndex == 0) {
-                                          _defaultExpenseCategories.add(
-                                            created,
-                                          );
-                                        } else {
-                                          _defaultIncomeCategories.add(created);
-                                        }
-                                        _selectedCategory = created;
-                                        _showCategories = false;
-                                        _categoryQuery = '';
-                                      }),
-                                    ),
-                                  ],
-                                ),
+                                              border: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(12),
+                                                borderSide: BorderSide(
+                                                  color: AppColors.primary.withOpacity(0.3),
+                                                ),
+                                              ),
+                                              focusedBorder: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(12),
+                                                borderSide: const BorderSide(
+                                                  color: AppColors.primary,
+                                                  width: 2,
+                                                ),
+                                              ),
+                                              suffixIcon: _categoryQuery.isNotEmpty
+                                                  ? InkWell(
+                                                      onTap: () => setState(
+                                                        () => _categoryQuery = '',
+                                                      ),
+                                                      child: const Icon(
+                                                        Icons.close_rounded,
+                                                      ),
+                                                    )
+                                                  : null,
+                                            ),
+                                            onChanged: (v) => setState(
+                                              () => _categoryQuery = v.trim(),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 16),
+                                          Container(
+                                            constraints: const BoxConstraints(
+                                              maxHeight: 300,
+                                            ),
+                                            child: SingleChildScrollView(
+                                              child: _InlineCategoryGrid(
+                                                current: _selectedCategory,
+                                                options: (() {
+                                                  final list = _currentCategories
+                                                      .where(
+                                                        (c) =>
+                                                            c.name.toLowerCase().contains(
+                                                              _categoryQuery
+                                                                  .toLowerCase(),
+                                                            ),
+                                                      )
+                                                      .toList();
+                                                  list.sort(
+                                                    (a, b) => a.name
+                                                        .toLowerCase()
+                                                        .compareTo(b.name.toLowerCase()),
+                                                  );
+                                                  return list;
+                                                })(),
+                                                onChanged: (val) {
+                                                  if (val != null) {
+                                                    setState(() {
+                                                      _selectedCategory = val;
+                                                      _showCategories = false;
+                                                      _categoryQuery = '';
+                                                    });
+                                                  }
+                                                },
+                                                onAddNew: (created) => setState(() {
+                                                  if (_typeIndex == 0) {
+                                                    _defaultExpenseCategories.add(
+                                                      created,
+                                                    );
+                                                  } else {
+                                                    _defaultIncomeCategories.add(created);
+                                                  }
+                                                  _selectedCategory = created;
+                                                  _showCategories = false;
+                                                  _categoryQuery = '';
+                                                }),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : const SizedBox.shrink(),
+                              ),
                               const SizedBox(height: 12),
                               TextFormField(
                                 controller: _noteController,
@@ -992,7 +1025,13 @@ class _InlineCategoryGrid extends StatelessWidget {
       _buildAddTile(context),
       ...options.map((opt) => _buildOption(context, opt)),
     ];
-    return Wrap(spacing: 10, runSpacing: 10, children: tiles);
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      alignment: WrapAlignment.start,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: tiles,
+    );
   }
 
   Widget _buildAddTile(BuildContext context) {

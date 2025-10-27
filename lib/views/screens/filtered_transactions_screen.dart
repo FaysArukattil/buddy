@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:buddy/utils/colors.dart';
+import 'package:buddy/utils/format_utils.dart';
 import 'package:buddy/repositories/transaction_repository.dart';
 import 'package:buddy/views/screens/transaction_detail_screen.dart';
 
@@ -102,17 +103,27 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
   }
 
   void _previousMonth() {
-    setState(() {
-      _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1, 1);
+    if (_animController.isAnimating) return;
+    _animController.reverse().then((_) {
+      if (!mounted) return;
+      setState(() {
+        _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1);
+      });
+      _filterByMonth();
+      _animController.forward();
     });
-    _filterByMonth();
   }
 
   void _nextMonth() {
-    setState(() {
-      _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 1);
+    if (_animController.isAnimating) return;
+    _animController.reverse().then((_) {
+      if (!mounted) return;
+      setState(() {
+        _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1);
+      });
+      _filterByMonth();
+      _animController.forward();
     });
-    _filterByMonth();
   }
 
   String _formatTime(DateTime d) {
@@ -123,7 +134,7 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
     return '$h12:$minute $ampm';
   }
 
-  String _formatCurrency(double v) => '\$${v.toStringAsFixed(2)}';
+  String _formatCurrency(double v) => FormatUtils.formatCurrency(v, compact: true);
 
   String _formatTxDate(DateTime d) {
     const months = [
@@ -306,154 +317,165 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
 
           // Transactions list with animation
           Expanded(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: SlideTransition(
-                position: _slideAnimation,
-                child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-                  : _displayedTransactions.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                isIncome ? Icons.trending_up_rounded : Icons.trending_down_rounded,
-                                size: 80,
-                                color: Colors.grey.shade300,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No ${widget.type.toLowerCase()} transactions',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey.shade600,
-                                  fontWeight: FontWeight.w600,
+            child: GestureDetector(
+              onHorizontalDragEnd: (details) {
+                if (details.primaryVelocity != null) {
+                  // Lower threshold for more responsive swiping
+                  if (details.primaryVelocity! < -100) {
+                    // Swipe left -> next month
+                    _nextMonth();
+                  } else if (details.primaryVelocity! > 100) {
+                    // Swipe right -> previous month
+                    _previousMonth();
+                  }
+                }
+              },
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: SlideTransition(
+                  position: _slideAnimation,
+                  child: _isLoading
+                    ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                    : _displayedTransactions.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  isIncome ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+                                  size: 80,
+                                  color: Colors.grey.shade300,
                                 ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'for ${_monthYearLabel()}',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey.shade500,
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No ${widget.type.toLowerCase()} transactions',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    color: Colors.grey.shade600,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : GestureDetector(
-                          onHorizontalDragEnd: (details) {
-                            if (details.primaryVelocity! < 0) {
-                              _nextMonth();
-                            } else if (details.primaryVelocity! > 0) {
-                              _previousMonth();
-                            }
-                          },
-                          child: ListView.separated(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: _displayedTransactions.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 8),
-                            itemBuilder: (context, index) {
-                              final tx = _displayedTransactions[index];
-                              return Material(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(14),
-                                elevation: 2,
-                                child: InkWell(
+                                const SizedBox(height: 8),
+                                Text(
+                                  'for ${_monthYearLabel()}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.separated(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _displayedTransactions.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 8),
+                              itemBuilder: (context, index) {
+                                final tx = _displayedTransactions[index];
+                                return Material(
+                                  color: Colors.white,
                                   borderRadius: BorderRadius.circular(14),
-                                  onTap: () async {
-                                    await Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => TransactionDetailScreen(data: tx),
-                                      ),
-                                    );
-                                    if (mounted) await _load();
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.all(12),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 48,
-                                          height: 48,
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(12),
-                                            gradient: LinearGradient(
-                                              colors: [
-                                                amountColor.withOpacity(0.15),
-                                                Colors.white,
-                                              ],
-                                              begin: Alignment.topLeft,
-                                              end: Alignment.bottomRight,
+                                  elevation: 2,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(14),
+                                    onTap: () async {
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => TransactionDetailScreen(data: tx),
+                                        ),
+                                      );
+                                      if (mounted) await _load();
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 48,
+                                            height: 48,
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(12),
+                                              gradient: LinearGradient(
+                                                colors: [
+                                                  amountColor.withOpacity(0.15),
+                                                  Colors.white,
+                                                ],
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
+                                              ),
+                                            ),
+                                            alignment: Alignment.center,
+                                            child: Icon(
+                                              tx['icon'] != null
+                                                  ? IconData(
+                                                      tx['icon'] as int,
+                                                      fontFamily: 'MaterialIcons',
+                                                    )
+                                                  : _iconForNote(tx['note'] as String?),
+                                              size: 24,
+                                              color: AppColors.secondary,
                                             ),
                                           ),
-                                          alignment: Alignment.center,
-                                          child: Icon(
-                                            _iconForNote(tx['note'] as String?),
-                                            size: 24,
-                                            color: AppColors.secondary,
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  tx['title'] as String,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.w700,
+                                                    fontSize: 15,
+                                                    color: AppColors.textPrimary,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  tx['subtitle'] as String,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    color: AppColors.textSecondary,
+                                                    fontSize: 13,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                          const SizedBox(width: 12),
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.end,
                                             children: [
                                               Text(
-                                                tx['title'] as String,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: 15,
-                                                  color: AppColors.textPrimary,
+                                                (isIncome ? '+' : '-') + _formatCurrency(tx['amount'] as double),
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 14,
+                                                  color: amountColor,
                                                 ),
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                               const SizedBox(height: 4),
                                               Text(
-                                                tx['subtitle'] as String,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
+                                                _formatTxDate(tx['date'] as DateTime),
                                                 style: const TextStyle(
-                                                  color: AppColors.textSecondary,
-                                                  fontSize: 13,
+                                                  fontSize: 11,
+                                                  color: AppColors.textLight,
                                                 ),
                                               ),
                                             ],
                                           ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Column(
-                                          crossAxisAlignment: CrossAxisAlignment.end,
-                                          children: [
-                                            Text(
-                                              (isIncome ? '+' : '-') + _formatCurrency(tx['amount'] as double),
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w800,
-                                                fontSize: 16,
-                                                color: amountColor,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              _formatTxDate(tx['date'] as DateTime),
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                color: AppColors.textLight,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
+                                );
+                              },
+                            ),
+                ),
               ),
             ),
           ),

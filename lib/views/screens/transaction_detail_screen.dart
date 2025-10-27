@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:buddy/utils/colors.dart';
 import 'package:buddy/utils/images.dart';
+import 'package:buddy/widgets/animated_money_text.dart';
 import 'package:buddy/repositories/transaction_repository.dart';
 import 'package:buddy/views/screens/add_transaction_screen.dart';
 
@@ -180,10 +181,23 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                               ),
                               child: Row(
                                 children: [
-                                  CircleAvatar(
-                                    radius: 28,
-                                    backgroundColor: Colors.white,
-                                    child: _avatarChild(widget.data),
+                                  Container(
+                                    width: 56,
+                                    height: 56,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: widget.data['icon'] != null
+                                        ? Icon(
+                                            IconData(
+                                              widget.data['icon'] as int,
+                                              fontFamily: 'MaterialIcons',
+                                            ),
+                                            size: 28,
+                                            color: AppColors.secondary,
+                                          )
+                                        : _avatarChild(widget.data),
                                   ),
                                   const SizedBox(width: 14),
                                   Expanded(
@@ -373,27 +387,16 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                                 ),
                                 const SizedBox(height: 14),
                                 Center(
-                                  child: TweenAnimationBuilder<double>(
-                                    tween: Tween(
-                                      begin: 0,
-                                      end:
-                                          (widget.data['amount'] as double?) ??
-                                          0,
+                                  child: AnimatedMoneyText(
+                                    value: (widget.data['amount'] as double?) ?? 0,
+                                    showSign: true,
+                                    style: TextStyle(
+                                      fontSize: 30,
+                                      fontWeight: FontWeight.w800,
+                                      color: _isIncome
+                                          ? AppColors.income
+                                          : AppColors.expense,
                                     ),
-                                    duration: const Duration(milliseconds: 800),
-                                    curve: Curves.easeOutCubic,
-                                    builder: (context, value, _) {
-                                      return Text(
-                                        '${_isIncome ? '+' : '-'}${_formatCurrency(value)}',
-                                        style: TextStyle(
-                                          fontSize: 30,
-                                          fontWeight: FontWeight.w800,
-                                          color: _isIncome
-                                              ? AppColors.income
-                                              : AppColors.expense,
-                                        ),
-                                      );
-                                    },
                                   ),
                                 ),
                                 const SizedBox(height: 10),
@@ -469,10 +472,8 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
       'Nov',
       'Dec',
     ];
-    return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+    return '\${months[dt.month - 1]} \${dt.day}, \${dt.year}';
   }
-
-  String _formatCurrency(double v) => '\$${v.toStringAsFixed(2)}';
 
   Future<void> _openEdit() async {
     final result = await Navigator.push(

@@ -24,6 +24,7 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen>
   double _dragAccumX = 0;
   late final AnimationController _fabController;
   late final Animation<double> _fabBob;
+  final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>();
 
   @override
   void initState() {
@@ -252,8 +253,8 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen>
                     child: child,
                   ),
                   child: GestureDetector(
-                    onTap: () {
-                      showModalBottomSheet(
+                    onTap: () async {
+                      final result = await showModalBottomSheet(
                         context: context,
                         isScrollControlled: true,
                         backgroundColor: Colors.transparent,
@@ -272,6 +273,10 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen>
                           );
                         },
                       );
+                      // Refresh home screen if transaction was added
+                      if (result == true && mounted) {
+                        _homeKey.currentState?.refreshData();
+                      }
                     },
                     child: Container(
                       width: 64,

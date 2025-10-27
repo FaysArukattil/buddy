@@ -1,5 +1,7 @@
 import 'package:buddy/utils/images.dart';
 import 'package:buddy/utils/colors.dart';
+import 'package:buddy/utils/format_utils.dart';
+import 'package:buddy/widgets/animated_money_text.dart';
 import 'package:buddy/views/screens/bottomnavbarscreen/profile_screen.dart';
 import 'package:buddy/views/screens/transaction_detail_screen.dart';
 import 'package:buddy/views/screens/filtered_transactions_screen.dart';
@@ -11,10 +13,10 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() => HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen>
+class HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   String _displayName = '';
   double _totalBalance = 0;
@@ -34,7 +36,6 @@ class _HomeScreenState extends State<HomeScreen>
     super.initState();
     _loadUser();
     _repo = TransactionRepository();
-    _refreshFromDb();
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
@@ -44,10 +45,22 @@ class _HomeScreenState extends State<HomeScreen>
       end: 6.0,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
     _controller.repeat(reverse: true);
+    // Load data after initialization
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshFromDb();
+    });
+  }
+
+  void refreshData() {
+    _refreshFromDb();
   }
 
   Future<void> _refreshFromDb() async {
-    setState(() => _isLoading = true);
+    // Only show loading if we have no data
+    if (_transactions.isEmpty) {
+      setState(() => _isLoading = true);
+    }
+    
     final rows = await _repo.getAll();
     rows.sort(
       (a, b) => (DateTime.parse(
@@ -297,8 +310,8 @@ class _HomeScreenState extends State<HomeScreen>
                               ],
                             ),
                             const SizedBox(height: 8),
-                            Text(
-                              _formatCurrency(_totalBalance),
+                            AnimatedMoneyText(
+                              value: _totalBalance,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 36,
@@ -327,6 +340,7 @@ class _HomeScreenState extends State<HomeScreen>
                                       value: _income,
                                       color: AppColors.income,
                                       icon: Icons.arrow_downward_rounded,
+                                      key: ValueKey(_income),
                                     ),
                                   ),
                                 ),
@@ -350,6 +364,7 @@ class _HomeScreenState extends State<HomeScreen>
                                       value: _expenses,
                                       color: AppColors.expense,
                                       icon: Icons.arrow_upward_rounded,
+                                      key: ValueKey(_expenses),
                                     ),
                                   ),
                                 ),
@@ -544,9 +559,14 @@ class _HomeScreenState extends State<HomeScreen>
                                             ),
                                             alignment: Alignment.center,
                                             child: Icon(
-                                              _iconForNote(
-                                                tx['note'] as String?,
-                                              ),
+                                              tx['icon'] != null
+                                                  ? IconData(
+                                                      tx['icon'] as int,
+                                                      fontFamily: 'MaterialIcons',
+                                                    )
+                                                  : _iconForNote(
+                                                      tx['note'] as String?,
+                                                    ),
                                               size: 20,
                                               color: AppColors.secondary,
                                             ),
@@ -659,13 +679,16 @@ class _HomeScreenState extends State<HomeScreen>
                                             children: [
                                               Text(
                                                 (isIncome ? '+' : '-') +
-                                                    _formatCurrency(
+                                                    FormatUtils.formatCurrency(
                                                       tx['amount'] as double,
+                                                      compact: true,
                                                     ),
                                                 style: TextStyle(
                                                   fontWeight: FontWeight.w800,
                                                   color: amountColor,
+                                                  fontSize: 14,
                                                 ),
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                               const SizedBox(height: 2),
                                               Row(
@@ -713,11 +736,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  String _formatCurrency(double value) {
-    // Simple USD-like formatting without intl dependency
-    return '\$${value.toStringAsFixed(2)}';
-  }
-
   String _formatTxDate(DateTime d) {
     const months = [
       'Jan',
@@ -749,12 +767,14 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _statTile({
+    Key? key,
     required String label,
     required double value,
     required Color color,
     required IconData icon,
   }) {
     return Container(
+      key: key,
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(16),
@@ -779,22 +799,26 @@ class _HomeScreenState extends State<HomeScreen>
             child: Icon(icon, color: color, size: 16),
           ),
           const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(color: Colors.white, fontSize: 12),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                _formatCurrency(value),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
                 ),
-              ),
-            ],
+                const SizedBox(height: 2),
+                AnimatedMoneyText(
+                  value: value,
+                  compact: true,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

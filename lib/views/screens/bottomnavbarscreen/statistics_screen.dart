@@ -3,6 +3,7 @@ import 'dart:ui';
 // ignore: depend_on_referenced_packages
 import 'package:fl_chart/fl_chart.dart';
 import 'package:buddy/utils/colors.dart';
+import 'package:buddy/utils/format_utils.dart';
 import 'package:buddy/repositories/transaction_repository.dart';
 
 class StatisticsScreen extends StatefulWidget {
@@ -130,7 +131,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }).toList();
   }
 
-  String _formatCurrency(double v) => '\$${v.toStringAsFixed(2)}';
+  String _formatCurrency(double v) => FormatUtils.formatCurrency(v, compact: true);
 
   @override
   Widget build(BuildContext context) {
@@ -441,12 +442,16 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                 ),
                               ],
                             ),
-                            Text(
-                              _formatCurrency(total),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 24,
-                                fontWeight: FontWeight.w700,
+                            Flexible(
+                              child: Text(
+                                FormatUtils.formatCurrencyFull(total),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.right,
                               ),
                             ),
                           ],
@@ -513,42 +518,68 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                   ),
                                   titlesData: FlTitlesData(
                                     show: true,
-                                    rightTitles: const AxisTitles(
-                                      sideTitles: SideTitles(showTitles: false),
+                                    leftTitles: AxisTitles(
+                                      sideTitles: SideTitles(
+                                        showTitles: true,
+                                        reservedSize: 50,
+                                        getTitlesWidget: (value, meta) {
+                                          if (value == 0) return const SizedBox();
+                                          return Text(
+                                            FormatUtils.formatCurrency(value, compact: true),
+                                            style: const TextStyle(
+                                              fontSize: 9,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          );
+                                        },
+                                      ),
                                     ),
                                     topTitles: const AxisTitles(
                                       sideTitles: SideTitles(showTitles: false),
                                     ),
-                                    leftTitles: const AxisTitles(
+                                    rightTitles: const AxisTitles(
                                       sideTitles: SideTitles(showTitles: false),
                                     ),
                                     bottomTitles: AxisTitles(
                                       sideTitles: SideTitles(
                                         showTitles: true,
                                         reservedSize: 30,
-                                        interval: 1,
-                                        getTitlesWidget:
-                                            (double value, TitleMeta meta) {
-                                              final index = value.toInt();
-                                              if (index < 0 ||
-                                                  index >= labels.length) {
-                                                return const Text('');
-                                              }
-                                              return Padding(
-                                                padding: const EdgeInsets.only(
-                                                  top: 8.0,
-                                                ),
-                                                child: Text(
-                                                  labels[index],
-                                                  style: const TextStyle(
-                                                    color:
-                                                        AppColors.textSecondary,
-                                                    fontWeight: FontWeight.w500,
-                                                    fontSize: 11,
-                                                  ),
-                                                ),
-                                              );
-                                            },
+                                        interval: _selectedTab == 0 ? 4 : (_selectedTab == 2 ? 5 : 1),
+                                        getTitlesWidget: (value, meta) {
+                                          final idx = value.toInt();
+                                          if (idx < 0 || idx >= labels.length) {
+                                            return const SizedBox();
+                                          }
+                                          
+                                          // Show fewer labels to avoid crowding
+                                          bool shouldShow = false;
+                                          if (_selectedTab == 0) {
+                                            // Day: Show every 4 hours
+                                            shouldShow = idx % 4 == 0;
+                                          } else if (_selectedTab == 1) {
+                                            // Week: Show all days
+                                            shouldShow = true;
+                                          } else if (_selectedTab == 2) {
+                                            // Month: Show every 5 days
+                                            shouldShow = idx % 5 == 0 || idx == labels.length - 1;
+                                          } else {
+                                            // Year: Show every 2 months
+                                            shouldShow = idx % 2 == 0;
+                                          }
+                                          
+                                          if (!shouldShow) return const SizedBox();
+                                          
+                                          return Padding(
+                                            padding: const EdgeInsets.only(top: 8),
+                                            child: Text(
+                                              labels[idx],
+                                              style: const TextStyle(
+                                                fontSize: 10,
+                                                color: AppColors.textSecondary,
+                                              ),
+                                            ),
+                                          );
+                                        },
                                       ),
                                     ),
                                   ),
@@ -576,12 +607,35 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                       isStrokeCapRound: true,
                                       dotData: FlDotData(
                                         show: true,
+                                        checkToShowDot: (spot, barData) {
+                                          // Only show dots for non-zero values and reduce frequency significantly
+                                          if (spot.y == 0) return false;
+                                          final index = spot.x.toInt();
+                                          final totalPoints = points.length;
+                                          
+                                          // Day: Show every 4 hours (6 dots max)
+                                          if (_selectedTab == 0) {
+                                            return index % 4 == 0;
+                                          }
+                                          // Week: Show all days (7 dots)
+                                          else if (_selectedTab == 1) {
+                                            return true;
+                                          }
+                                          // Month: Show every 5 days (6-7 dots)
+                                          else if (_selectedTab == 2) {
+                                            return index % 5 == 0 || index == totalPoints - 1;
+                                          }
+                                          // Year: Show every 2 months (6 dots)
+                                          else {
+                                            return index % 2 == 0;
+                                          }
+                                        },
                                         getDotPainter:
                                             (spot, percent, barData, index) {
                                               return FlDotCirclePainter(
-                                                radius: 5,
+                                                radius: 3.5,
                                                 color: Colors.white,
-                                                strokeWidth: 3,
+                                                strokeWidth: 2.5,
                                                 strokeColor: AppColors.primary,
                                               );
                                             },
@@ -620,7 +674,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                               barSpot,
                                             ) {
                                               return LineTooltipItem(
-                                                '\$${barSpot.y.toStringAsFixed(0)}',
+                                                FormatUtils.formatCurrency(
+                                                  barSpot.y,
+                                                  compact: true,
+                                                ),
                                                 const TextStyle(
                                                   color: Colors.white,
                                                   fontWeight: FontWeight.bold,
@@ -769,7 +826,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       ),
                     ],
 
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 120),
                   ],
                 ),
               ),

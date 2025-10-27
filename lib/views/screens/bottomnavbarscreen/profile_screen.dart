@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:buddy/utils/colors.dart';
 import 'package:buddy/utils/images.dart';
+import 'package:buddy/utils/format_utils.dart';
 import 'package:buddy/repositories/transaction_repository.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -119,7 +120,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  String _formatCurrency(double v) => '\$${v.toStringAsFixed(2)}';
+  String _formatCurrency(double v) => FormatUtils.formatCurrency(v, compact: true);
 
   String _todayLabel() {
     final now = DateTime.now();
