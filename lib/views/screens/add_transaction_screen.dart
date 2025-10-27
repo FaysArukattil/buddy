@@ -393,7 +393,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        widget.existingTransaction != null ? 'Edit Transaction' : 'Add Transaction',
+                        widget.existingTransaction != null
+                            ? 'Edit Transaction'
+                            : 'Add Transaction',
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
