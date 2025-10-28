@@ -69,12 +69,15 @@ class DatabaseHelper {
 
   // Transaction-specific helpers matching your previous style
   Future<int> insertTransaction(Map<String, Object?> values) async {
+    debugPrint('💾 DATABASE: Inserting transaction: ${values['type']} ₹${values['amount']} on ${values['date']}');
     final db = await database;
-    return db.insert(
+    final id = await db.insert(
       'transactions',
       values,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    debugPrint('✅ DATABASE: Transaction saved with ID: $id');
+    return id;
   }
 
   Future<int> updateTransaction(int id, Map<String, Object?> values) async {
@@ -95,7 +98,12 @@ class DatabaseHelper {
 
   Future<List<Map<String, Object?>>> getAllTransactions() async {
     final db = await database;
-    return db.query('transactions', orderBy: 'date DESC');
+    final results = await db.query('transactions', orderBy: 'date DESC');
+    debugPrint('📖 DATABASE: Retrieved ${results.length} transactions');
+    for (final row in results) {
+      debugPrint('   - ${row['type']} ₹${row['amount']} (${row['category']}) [ID: ${row['id']}]');
+    }
+    return results;
   }
 
   Future<Map<String, Object?>?> getTransactionById(int id) async {

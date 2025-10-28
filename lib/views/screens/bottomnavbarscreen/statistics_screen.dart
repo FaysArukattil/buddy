@@ -756,8 +756,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                           touchTooltipData: LineTouchTooltipData(
                                             getTooltipColor: (touchedSpot) =>
                                                 AppColors.secondary,
-                                            tooltipBorderRadius:
-                                                BorderRadius.circular(12),
                                             tooltipPadding:
                                                 const EdgeInsets.symmetric(
                                                   horizontal: 12,

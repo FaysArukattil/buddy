@@ -276,8 +276,21 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen>
                       );
                       // Refresh home and profile screens if transaction was added
                       if (result == true && mounted) {
-                        _homeKey.currentState?.refreshData();
-                        _profileKey.currentState?.refreshData();
+                        debugPrint('💾 Transaction saved, refreshing screens...');
+                        final homeState = _homeKey.currentState;
+                        final profileState = _profileKey.currentState;
+                        debugPrint('Home state: ${homeState != null ? "Found ✓" : "NULL ✗"}');
+                        debugPrint('Profile state: ${profileState != null ? "Found ✓" : "NULL ✗"}');
+                        
+                        // Refresh both screens
+                        if (homeState != null) {
+                          await homeState.refreshData();
+                        }
+                        if (profileState != null) {
+                          profileState.refreshData();
+                        }
+                        
+                        debugPrint('✅ Both screens refresh triggered');
                       }
                     },
                     child: Container(
