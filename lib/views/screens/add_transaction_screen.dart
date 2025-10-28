@@ -77,7 +77,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
       _amountController.text = (tx['amount'] as double).toStringAsFixed(2);
       _noteController.text = tx['note'] as String? ?? '';
       _selectedDate = tx['date'] as DateTime;
-      final type = (tx['type'] as String).toLowerCase();
+      final type = (tx['type'] as String).toLowerCase().trim();
       _typeIndex = type == 'income' ? 1 : 0;
       _page = _typeIndex.toDouble();
 
@@ -234,7 +234,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                             duration: const Duration(milliseconds: 200),
                             decoration: BoxDecoration(
                               color: selected
-                                  ? AppColors.primary.withOpacity(0.15)
+                                  ? AppColors.primary.withValues(alpha: 0.15)
                                   : Colors.grey.shade50,
                               border: Border.all(
                                 color: selected
@@ -272,7 +272,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                         );
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary.withOpacity(0.88),
+                        backgroundColor: AppColors.primary.withValues(alpha: 0.88),
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -363,7 +363,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
               _dragging = false;
               _page = target.toDouble();
               _typeIndex = target;
-              _selectedCategory = null;
+              // Don't clear selected category when switching tabs
               _showCategories = false;
             });
           },
@@ -467,7 +467,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                                     setState(() {
                                       _typeIndex = 0;
                                       _page = 0;
-                                      _selectedCategory = null;
+                                      // Don't clear selected category when switching tabs
                                       _showCategories = false;
                                     });
                                   },
@@ -500,7 +500,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                                     setState(() {
                                       _typeIndex = 1;
                                       _page = 1;
-                                      _selectedCategory = null;
+                                      // Don't clear selected category when switching tabs
                                       _showCategories = false;
                                     });
                                   },
@@ -649,12 +649,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
                                       color: _showCategories 
-                                          ? AppColors.primary.withOpacity(0.5)
+                                          ? AppColors.primary.withValues(alpha: 0.5)
                                           : Colors.black26,
                                       width: _showCategories ? 2 : 1,
                                     ),
                                     color: _showCategories
-                                        ? AppColors.primary.withOpacity(0.05)
+                                        ? AppColors.primary.withValues(alpha: 0.05)
                                         : Colors.transparent,
                                   ),
                                   child: Row(
@@ -723,7 +723,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                                               border: OutlineInputBorder(
                                                 borderRadius: BorderRadius.circular(12),
                                                 borderSide: BorderSide(
-                                                  color: AppColors.primary.withOpacity(0.3),
+                                                  color: AppColors.primary.withValues(alpha: 0.3),
                                                 ),
                                               ),
                                               focusedBorder: OutlineInputBorder(
@@ -1069,7 +1069,7 @@ class _InlineCategoryGrid extends StatelessWidget {
     final selected = current?.name == opt.name;
     return Material(
       color: selected
-          ? AppColors.primary.withOpacity(0.15)
+          ? AppColors.primary.withValues(alpha: 0.15)
           : Colors.grey.shade50,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(

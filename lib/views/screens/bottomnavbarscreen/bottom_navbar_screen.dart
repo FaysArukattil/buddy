@@ -25,6 +25,7 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen>
   late final AnimationController _fabController;
   late final Animation<double> _fabBob;
   final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>();
+  final GlobalKey<ProfileScreenState> _profileKey = GlobalKey<ProfileScreenState>();
 
   @override
   void initState() {
@@ -63,7 +64,7 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen>
             controller: _pageController,
             physics: const BouncingScrollPhysics(),
             onPageChanged: (i) => setState(() => _currentIndex = i),
-            children: const [HomeScreen(), StatisticsScreen(), ProfileScreen()],
+            children: [HomeScreen(key: _homeKey), const StatisticsScreen(), ProfileScreen(key: _profileKey)],
           ),
 
           // Glassmorphic bottom bar
@@ -273,9 +274,10 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen>
                           );
                         },
                       );
-                      // Refresh home screen if transaction was added
+                      // Refresh home and profile screens if transaction was added
                       if (result == true && mounted) {
                         _homeKey.currentState?.refreshData();
+                        _profileKey.currentState?.refreshData();
                       }
                     },
                     child: Container(

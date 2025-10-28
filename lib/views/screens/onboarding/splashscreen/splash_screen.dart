@@ -23,20 +23,22 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> checklogin() async {
     final pref = await SharedPreferences.getInstance();
-    Future.delayed(Duration(seconds: 3), () {
-      final isloggedin = pref.getBool("is_logged_in") ?? false;
-      if (isloggedin) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => BottomNavbarScreen()),
-        );
-      } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => OnboardingScreen()),
-        );
-      }
-    });
+    await Future.delayed(const Duration(seconds: 3));
+    
+    if (!mounted) return;
+    
+    final isloggedin = pref.getBool("is_logged_in") ?? false;
+    if (isloggedin) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const BottomNavbarScreen()),
+      );
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const OnboardingScreen()),
+      );
+    }
   }
 
   @override
@@ -55,9 +57,9 @@ class _SplashScreenState extends State<SplashScreen> {
                 height: 250,
                 fit: BoxFit.contain,
               ),
-              SizedBox(height: 20),
+              const SizedBox(height: 20),
               // App Name
-              Text(
+              const Text(
                 "Buddy",
                 style: TextStyle(
                   color: AppColors.textWhite,

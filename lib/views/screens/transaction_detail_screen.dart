@@ -19,7 +19,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
   late final AnimationController _bobController;
   late final Animation<double> _bobAnimation;
 
-  bool get _isIncome => (widget.data['type'] as String) == 'income';
+  bool get _isIncome => (widget.data['type'] as String).toLowerCase().trim() == 'income';
 
   @override
   void initState() {
@@ -275,40 +275,52 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                                         ),
                                         const SizedBox(height: 6),
                                         // Time and Date row
-                                        Row(
+                                        Wrap(
+                                          spacing: 10,
+                                          runSpacing: 4,
+                                          crossAxisAlignment: WrapCrossAlignment.center,
                                           children: [
-                                            Icon(
-                                              Icons.access_time_rounded,
-                                              size: 14,
-                                              color: Colors.white70,
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.access_time_rounded,
+                                                  size: 14,
+                                                  color: Colors.white70,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  (widget.data['time']
+                                                          as String?) ??
+                                                      '-',
+                                                  style: const TextStyle(
+                                                    color: Colors.white70,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              (widget.data['time']
-                                                      as String?) ??
-                                                  '-',
-                                              style: const TextStyle(
-                                                color: Colors.white70,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Icon(
-                                              Icons.event_rounded,
-                                              size: 14,
-                                              color: Colors.white70,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              _formatDate(
-                                                (widget.data['date']
-                                                        as DateTime?) ??
-                                                    DateTime.now(),
-                                              ),
-                                              style: const TextStyle(
-                                                color: Colors.white70,
-                                                fontSize: 12,
-                                              ),
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.event_rounded,
+                                                  size: 14,
+                                                  color: Colors.white70,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  _formatDate(
+                                                    (widget.data['date']
+                                                            as DateTime?) ??
+                                                        DateTime.now(),
+                                                  ),
+                                                  style: const TextStyle(
+                                                    color: Colors.white70,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ],
                                         ),
@@ -472,7 +484,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
       'Nov',
       'Dec',
     ];
-    return '\${months[dt.month - 1]} \${dt.day}, \${dt.year}';
+    return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
   }
 
   Future<void> _openEdit() async {

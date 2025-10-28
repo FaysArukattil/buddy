@@ -41,10 +41,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       case 0: // Day: 24 hours
         final buckets = List<double>.filled(24, 0);
         for (final r in _rows) {
-          final type = (r['type'] as String).toLowerCase();
-          if ((isIncome && type != 'income') || (!isIncome && type != 'expense')) continue;
+          final type = (r['type'] as String).toLowerCase().trim();
+          if ((isIncome && type != 'income') ||
+              (!isIncome && type != 'expense')) {
+            continue;
+          }
           final dt = DateTime.tryParse(r['date'] as String) ?? now;
-          if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+          if (dt.year == now.year &&
+              dt.month == now.month &&
+              dt.day == now.day) {
             buckets[dt.hour] += (r['amount'] as num).toDouble();
           }
         }
@@ -53,12 +58,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         final buckets = List<double>.filled(7, 0);
         final startOfWeek = now.subtract(Duration(days: (now.weekday - 1) % 7));
         for (final r in _rows) {
-          final type = (r['type'] as String).toLowerCase();
-          if ((isIncome && type != 'income') || (!isIncome && type != 'expense')) continue;
+          final type = (r['type'] as String).toLowerCase().trim();
+          if ((isIncome && type != 'income') ||
+              (!isIncome && type != 'expense')) {
+            continue;
+          }
           final dt = DateTime.tryParse(r['date'] as String) ?? now;
-          final start = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
+          final start = DateTime(
+            startOfWeek.year,
+            startOfWeek.month,
+            startOfWeek.day,
+          );
           final end = start.add(const Duration(days: 7));
-          if (dt.isAfter(start.subtract(const Duration(milliseconds: 1))) && dt.isBefore(end)) {
+          if (dt.isAfter(start.subtract(const Duration(milliseconds: 1))) &&
+              dt.isBefore(end)) {
             final idx = (dt.weekday - 1) % 7;
             buckets[idx] += (r['amount'] as num).toDouble();
           }
@@ -68,8 +81,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
         final buckets = List<double>.filled(daysInMonth, 0);
         for (final r in _rows) {
-          final type = (r['type'] as String).toLowerCase();
-          if ((isIncome && type != 'income') || (!isIncome && type != 'expense')) continue;
+          final type = (r['type'] as String).toLowerCase().trim();
+          if ((isIncome && type != 'income') ||
+              (!isIncome && type != 'expense')) {
+            continue;
+          }
           final dt = DateTime.tryParse(r['date'] as String) ?? now;
           if (dt.year == now.year && dt.month == now.month) {
             buckets[dt.day - 1] += (r['amount'] as num).toDouble();
@@ -79,8 +95,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       default: // Year: Jan..Dec
         final buckets = List<double>.filled(12, 0);
         for (final r in _rows) {
-          final type = (r['type'] as String).toLowerCase();
-          if ((isIncome && type != 'income') || (!isIncome && type != 'expense')) continue;
+          final type = (r['type'] as String).toLowerCase().trim();
+          if ((isIncome && type != 'income') ||
+              (!isIncome && type != 'expense')) {
+            continue;
+          }
           final dt = DateTime.tryParse(r['date'] as String) ?? now;
           if (dt.year == now.year) {
             buckets[dt.month - 1] += (r['amount'] as num).toDouble();
@@ -93,7 +112,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   List<String> _computeLabels() {
     switch (_selectedTab) {
       case 0:
-        return List.generate(24, (i) => '${i}:00');
+        return List.generate(24, (i) => '$i:00');
       case 1:
         return const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       case 2:
@@ -101,7 +120,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         final days = DateTime(now.year, now.month + 1, 0).day;
         return List.generate(days, (i) => '${i + 1}');
       default:
-        return const ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return const [
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
+        ];
     }
   }
 
@@ -112,26 +144,43 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   List<Map<String, dynamic>> _computeTopCategories() {
     final isIncome = _type.toLowerCase() == 'income';
     final categoryTotals = <String, double>{};
-    
+    final categoryIcons = <String, int>{}; // Store icon for each category
+
     for (final r in _rows) {
-      final type = (r['type'] as String).toLowerCase();
-      if ((isIncome && type != 'income') || (!isIncome && type != 'expense')) continue;
-      
+      final type = (r['type'] as String).toLowerCase().trim();
+      if ((isIncome && type != 'income') || (!isIncome && type != 'expense')) {
+        continue;
+      }
+
       final cat = r['category'] as String;
       final amt = (r['amount'] as num).toDouble();
+      final icon = r['icon'] as int?;
+
       categoryTotals[cat] = (categoryTotals[cat] ?? 0) + amt;
+
+      // Store the icon for this category (use the first one we find)
+      if (icon != null && !categoryIcons.containsKey(cat)) {
+        categoryIcons[cat] = icon;
+      }
     }
-    
+
     final sorted = categoryTotals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    
-    return sorted.take(5).map((e) => {
-      'category': e.key,
-      'amount': e.value,
-    }).toList();
+
+    return sorted
+        .take(5)
+        .map(
+          (e) => {
+            'category': e.key,
+            'amount': e.value,
+            'icon': categoryIcons[e.key],
+          },
+        )
+        .toList();
   }
 
-  String _formatCurrency(double v) => FormatUtils.formatCurrency(v, compact: true);
+  String _formatCurrency(double v) =>
+      FormatUtils.formatCurrency(v, compact: true);
 
   @override
   Widget build(BuildContext context) {
@@ -399,12 +448,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20.0),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 16,
+                        ),
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              _type == 'Income' ? AppColors.income : AppColors.expense,
-                              (_type == 'Income' ? AppColors.income : AppColors.expense).withOpacity(0.7),
+                              _type == 'Income'
+                                  ? AppColors.income
+                                  : AppColors.expense,
+                              (_type == 'Income'
+                                      ? AppColors.income
+                                      : AppColors.expense)
+                                  .withValues(alpha: 0.7),
                             ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
@@ -412,7 +469,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: (_type == 'Income' ? AppColors.income : AppColors.expense).withOpacity(0.3),
+                              color:
+                                  (_type == 'Income'
+                                          ? AppColors.income
+                                          : AppColors.expense)
+                                      .withValues(alpha: 0.3),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),
@@ -425,7 +486,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Total ${_type}',
+                                  'Total $_type',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 14,
@@ -436,7 +497,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                 Text(
                                   _tabs[_selectedTab],
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.9),
+                                    color: Colors.white.withValues(alpha: 0.9),
                                     fontSize: 12,
                                   ),
                                 ),
@@ -501,219 +562,260 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                 16,
                                 16,
                               ),
-                              child: hasData ? LineChart(
-                                LineChartData(
-                                  gridData: FlGridData(
-                                    show: true,
-                                    drawVerticalLine: false,
-                                    horizontalInterval: 1,
-                                    getDrawingHorizontalLine: (value) {
-                                      return FlLine(
-                                        color: AppColors.textLight.withValues(
-                                          alpha: 0.15,
+                              child: hasData
+                                  ? LineChart(
+                                      LineChartData(
+                                        gridData: FlGridData(
+                                          show: true,
+                                          drawVerticalLine: false,
+                                          horizontalInterval: 1,
+                                          getDrawingHorizontalLine: (value) {
+                                            return FlLine(
+                                              color: AppColors.textLight
+                                                  .withValues(alpha: 0.15),
+                                              strokeWidth: 1,
+                                            );
+                                          },
                                         ),
-                                        strokeWidth: 1,
-                                      );
-                                    },
-                                  ),
-                                  titlesData: FlTitlesData(
-                                    show: true,
-                                    leftTitles: AxisTitles(
-                                      sideTitles: SideTitles(
-                                        showTitles: true,
-                                        reservedSize: 50,
-                                        getTitlesWidget: (value, meta) {
-                                          if (value == 0) return const SizedBox();
-                                          return Text(
-                                            FormatUtils.formatCurrency(value, compact: true),
-                                            style: const TextStyle(
-                                              fontSize: 9,
-                                              color: AppColors.textSecondary,
+                                        titlesData: FlTitlesData(
+                                          show: true,
+                                          leftTitles: AxisTitles(
+                                            sideTitles: SideTitles(
+                                              showTitles: true,
+                                              reservedSize: 50,
+                                              getTitlesWidget: (value, meta) {
+                                                if (value == 0) {
+                                                  return const SizedBox();
+                                                }
+                                                return Text(
+                                                  FormatUtils.formatCurrency(
+                                                    value,
+                                                    compact: true,
+                                                  ),
+                                                  style: const TextStyle(
+                                                    fontSize: 9,
+                                                    color:
+                                                        AppColors.textSecondary,
+                                                  ),
+                                                );
+                                              },
                                             ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                    topTitles: const AxisTitles(
-                                      sideTitles: SideTitles(showTitles: false),
-                                    ),
-                                    rightTitles: const AxisTitles(
-                                      sideTitles: SideTitles(showTitles: false),
-                                    ),
-                                    bottomTitles: AxisTitles(
-                                      sideTitles: SideTitles(
-                                        showTitles: true,
-                                        reservedSize: 30,
-                                        interval: _selectedTab == 0 ? 4 : (_selectedTab == 2 ? 5 : 1),
-                                        getTitlesWidget: (value, meta) {
-                                          final idx = value.toInt();
-                                          if (idx < 0 || idx >= labels.length) {
-                                            return const SizedBox();
-                                          }
-                                          
-                                          // Show fewer labels to avoid crowding
-                                          bool shouldShow = false;
-                                          if (_selectedTab == 0) {
-                                            // Day: Show every 4 hours
-                                            shouldShow = idx % 4 == 0;
-                                          } else if (_selectedTab == 1) {
-                                            // Week: Show all days
-                                            shouldShow = true;
-                                          } else if (_selectedTab == 2) {
-                                            // Month: Show every 5 days
-                                            shouldShow = idx % 5 == 0 || idx == labels.length - 1;
-                                          } else {
-                                            // Year: Show every 2 months
-                                            shouldShow = idx % 2 == 0;
-                                          }
-                                          
-                                          if (!shouldShow) return const SizedBox();
-                                          
-                                          return Padding(
-                                            padding: const EdgeInsets.only(top: 8),
-                                            child: Text(
-                                              labels[idx],
-                                              style: const TextStyle(
-                                                fontSize: 10,
-                                                color: AppColors.textSecondary,
+                                          ),
+                                          topTitles: const AxisTitles(
+                                            sideTitles: SideTitles(
+                                              showTitles: false,
+                                            ),
+                                          ),
+                                          rightTitles: const AxisTitles(
+                                            sideTitles: SideTitles(
+                                              showTitles: false,
+                                            ),
+                                          ),
+                                          bottomTitles: AxisTitles(
+                                            sideTitles: SideTitles(
+                                              showTitles: true,
+                                              reservedSize: 30,
+                                              interval: _selectedTab == 0
+                                                  ? 4
+                                                  : (_selectedTab == 2 ? 5 : 1),
+                                              getTitlesWidget: (value, meta) {
+                                                final idx = value.toInt();
+                                                if (idx < 0 ||
+                                                    idx >= labels.length) {
+                                                  return const SizedBox();
+                                                }
+
+                                                // Show fewer labels to avoid crowding
+                                                bool shouldShow = false;
+                                                if (_selectedTab == 0) {
+                                                  // Day: Show every 4 hours
+                                                  shouldShow = idx % 4 == 0;
+                                                } else if (_selectedTab == 1) {
+                                                  // Week: Show all days
+                                                  shouldShow = true;
+                                                } else if (_selectedTab == 2) {
+                                                  // Month: Show every 5 days
+                                                  shouldShow =
+                                                      idx % 5 == 0 ||
+                                                      idx == labels.length - 1;
+                                                } else {
+                                                  // Year: Show every 2 months
+                                                  shouldShow = idx % 2 == 0;
+                                                }
+
+                                                if (!shouldShow) {
+                                                  return const SizedBox();
+                                                }
+
+                                                return Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                        top: 8,
+                                                      ),
+                                                  child: Text(
+                                                    labels[idx],
+                                                    style: const TextStyle(
+                                                      fontSize: 10,
+                                                      color: AppColors
+                                                          .textSecondary,
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                        borderData: FlBorderData(show: false),
+                                        minX: 0,
+                                        maxX: (points.length - 1).toDouble(),
+                                        minY: 0,
+                                        maxY: hasData && points.isNotEmpty
+                                            ? points.reduce(
+                                                    (a, b) => a > b ? a : b,
+                                                  ) *
+                                                  1.2
+                                            : 10,
+                                        lineBarsData: [
+                                          LineChartBarData(
+                                            spots: List.generate(
+                                              points.length,
+                                              (i) => FlSpot(
+                                                i.toDouble(),
+                                                points[i],
                                               ),
                                             ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                  borderData: FlBorderData(show: false),
-                                  minX: 0,
-                                  maxX: (points.length - 1).toDouble(),
-                                  minY: 0,
-                                  maxY: hasData
-                                      ? points.reduce((a, b) => a > b ? a : b) * 1.2
-                                      : 10,
-                                  lineBarsData: [
-                                    LineChartBarData(
-                                      spots: List.generate(
-                                        points.length,
-                                        (i) => FlSpot(i.toDouble(), points[i]),
-                                      ),
-                                      isCurved: true,
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          AppColors.primary,
-                                          AppColors.secondary,
+                                            isCurved: true,
+                                            gradient: const LinearGradient(
+                                              colors: [
+                                                AppColors.primary,
+                                                AppColors.secondary,
+                                              ],
+                                            ),
+                                            barWidth: 3,
+                                            isStrokeCapRound: true,
+                                            dotData: FlDotData(
+                                              show: true,
+                                              checkToShowDot: (spot, barData) {
+                                                // Only show dots for non-zero values and reduce frequency significantly
+                                                if (spot.y == 0) return false;
+                                                final index = spot.x.toInt();
+                                                final totalPoints =
+                                                    points.length;
+
+                                                // Day: Show every 4 hours (6 dots max)
+                                                if (_selectedTab == 0) {
+                                                  return index % 4 == 0;
+                                                }
+                                                // Week: Show all days (7 dots)
+                                                else if (_selectedTab == 1) {
+                                                  return true;
+                                                }
+                                                // Month: Show every 5 days (6-7 dots)
+                                                else if (_selectedTab == 2) {
+                                                  return index % 5 == 0 ||
+                                                      index == totalPoints - 1;
+                                                }
+                                                // Year: Show every 2 months (6 dots)
+                                                else {
+                                                  return index % 2 == 0;
+                                                }
+                                              },
+                                              getDotPainter:
+                                                  (
+                                                    spot,
+                                                    percent,
+                                                    barData,
+                                                    index,
+                                                  ) {
+                                                    return FlDotCirclePainter(
+                                                      radius: 3.5,
+                                                      color: Colors.white,
+                                                      strokeWidth: 2.5,
+                                                      strokeColor:
+                                                          AppColors.primary,
+                                                    );
+                                                  },
+                                            ),
+                                            belowBarData: BarAreaData(
+                                              show: true,
+                                              gradient: LinearGradient(
+                                                colors: [
+                                                  AppColors.primary.withValues(
+                                                    alpha: 0.3,
+                                                  ),
+                                                  AppColors.secondary
+                                                      .withValues(alpha: 0.05),
+                                                ],
+                                                begin: Alignment.topCenter,
+                                                end: Alignment.bottomCenter,
+                                              ),
+                                            ),
+                                          ),
                                         ],
-                                      ),
-                                      barWidth: 3,
-                                      isStrokeCapRound: true,
-                                      dotData: FlDotData(
-                                        show: true,
-                                        checkToShowDot: (spot, barData) {
-                                          // Only show dots for non-zero values and reduce frequency significantly
-                                          if (spot.y == 0) return false;
-                                          final index = spot.x.toInt();
-                                          final totalPoints = points.length;
-                                          
-                                          // Day: Show every 4 hours (6 dots max)
-                                          if (_selectedTab == 0) {
-                                            return index % 4 == 0;
-                                          }
-                                          // Week: Show all days (7 dots)
-                                          else if (_selectedTab == 1) {
-                                            return true;
-                                          }
-                                          // Month: Show every 5 days (6-7 dots)
-                                          else if (_selectedTab == 2) {
-                                            return index % 5 == 0 || index == totalPoints - 1;
-                                          }
-                                          // Year: Show every 2 months (6 dots)
-                                          else {
-                                            return index % 2 == 0;
-                                          }
-                                        },
-                                        getDotPainter:
-                                            (spot, percent, barData, index) {
-                                              return FlDotCirclePainter(
-                                                radius: 3.5,
-                                                color: Colors.white,
-                                                strokeWidth: 2.5,
-                                                strokeColor: AppColors.primary,
-                                              );
-                                            },
-                                      ),
-                                      belowBarData: BarAreaData(
-                                        show: true,
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            AppColors.primary.withValues(
-                                              alpha: 0.3,
-                                            ),
-                                            AppColors.secondary.withValues(
-                                              alpha: 0.05,
-                                            ),
-                                          ],
-                                          begin: Alignment.topCenter,
-                                          end: Alignment.bottomCenter,
+                                        lineTouchData: LineTouchData(
+                                          touchTooltipData: LineTouchTooltipData(
+                                            getTooltipColor: (touchedSpot) =>
+                                                AppColors.secondary,
+                                            tooltipBorderRadius:
+                                                BorderRadius.circular(12),
+                                            tooltipPadding:
+                                                const EdgeInsets.symmetric(
+                                                  horizontal: 12,
+                                                  vertical: 8,
+                                                ),
+                                            getTooltipItems:
+                                                (
+                                                  List<LineBarSpot>
+                                                  touchedBarSpots,
+                                                ) {
+                                                  return touchedBarSpots.map((
+                                                    barSpot,
+                                                  ) {
+                                                    return LineTooltipItem(
+                                                      FormatUtils.formatCurrency(
+                                                        barSpot.y,
+                                                        compact: true,
+                                                      ),
+                                                      const TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 14,
+                                                      ),
+                                                    );
+                                                  }).toList();
+                                                },
+                                          ),
+                                          handleBuiltInTouches: true,
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                  lineTouchData: LineTouchData(
-                                    touchTooltipData: LineTouchTooltipData(
-                                      getTooltipColor: (touchedSpot) =>
-                                          AppColors.secondary,
-                                      tooltipBorderRadius:
-                                          BorderRadius.circular(12),
-                                      tooltipPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 8,
+                                      duration: const Duration(
+                                        milliseconds: 800,
+                                      ),
+                                      curve: Curves.easeOutCubic,
+                                    )
+                                  : Center(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.show_chart_rounded,
+                                            size: 64,
+                                            color: Colors.grey.shade400,
                                           ),
-                                      getTooltipItems:
-                                          (List<LineBarSpot> touchedBarSpots) {
-                                            return touchedBarSpots.map((
-                                              barSpot,
-                                            ) {
-                                              return LineTooltipItem(
-                                                FormatUtils.formatCurrency(
-                                                  barSpot.y,
-                                                  compact: true,
-                                                ),
-                                                const TextStyle(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 14,
-                                                ),
-                                              );
-                                            }).toList();
-                                          },
-                                    ),
-                                    handleBuiltInTouches: true,
-                                  ),
-                                ),
-                                duration: const Duration(milliseconds: 800),
-                                curve: Curves.easeOutCubic,
-                              )
-                            : Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.show_chart_rounded,
-                                      size: 64,
-                                      color: Colors.grey.shade400,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      'No data for this period',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        color: Colors.grey.shade600,
-                                        fontWeight: FontWeight.w600,
+                                          const SizedBox(height: 12),
+                                          Text(
+                                            'No data for this period',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              color: Colors.grey.shade600,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                  ],
-                                ),
-                              ),
                             ),
                           ),
                         ),
@@ -738,7 +840,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                             ),
                             const SizedBox(height: 12),
                             ...topCategories.map((cat) {
-                              final percentage = total > 0 ? (cat['amount'] as double) / total * 100 : 0;
+                              final percentage = total > 0
+                                  ? (cat['amount'] as double) / total * 100
+                                  : 0;
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 12),
                                 padding: const EdgeInsets.all(16),
@@ -747,7 +851,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                   borderRadius: BorderRadius.circular(16),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.05),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.05,
+                                      ),
                                       blurRadius: 10,
                                       offset: const Offset(0, 4),
                                     ),
@@ -758,19 +864,31 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                     Container(
                                       padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
-                                        color: (_type == 'Income' ? AppColors.income : AppColors.expense).withOpacity(0.1),
+                                        color:
+                                            (_type == 'Income'
+                                                    ? AppColors.income
+                                                    : AppColors.expense)
+                                                .withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Icon(
-                                        Icons.category_rounded,
-                                        color: _type == 'Income' ? AppColors.income : AppColors.expense,
+                                        cat['icon'] != null
+                                            ? IconData(
+                                                cat['icon'] as int,
+                                                fontFamily: 'MaterialIcons',
+                                              )
+                                            : Icons.category_rounded,
+                                        color: _type == 'Income'
+                                            ? AppColors.income
+                                            : AppColors.expense,
                                         size: 24,
                                       ),
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             cat['category'] as String,
@@ -782,13 +900,19 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                           ),
                                           const SizedBox(height: 4),
                                           ClipRRect(
-                                            borderRadius: BorderRadius.circular(4),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
                                             child: LinearProgressIndicator(
                                               value: percentage / 100,
-                                              backgroundColor: Colors.grey.shade200,
-                                              valueColor: AlwaysStoppedAnimation(
-                                                _type == 'Income' ? AppColors.income : AppColors.expense,
-                                              ),
+                                              backgroundColor:
+                                                  Colors.grey.shade200,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation(
+                                                    _type == 'Income'
+                                                        ? AppColors.income
+                                                        : AppColors.expense,
+                                                  ),
                                               minHeight: 6,
                                             ),
                                           ),
@@ -797,14 +921,19 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                     ),
                                     const SizedBox(width: 12),
                                     Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
                                       children: [
                                         Text(
-                                          _formatCurrency(cat['amount'] as double),
+                                          _formatCurrency(
+                                            cat['amount'] as double,
+                                          ),
                                           style: TextStyle(
                                             fontWeight: FontWeight.w700,
                                             fontSize: 16,
-                                            color: _type == 'Income' ? AppColors.income : AppColors.expense,
+                                            color: _type == 'Income'
+                                                ? AppColors.income
+                                                : AppColors.expense,
                                           ),
                                         ),
                                         const SizedBox(height: 2),
@@ -820,7 +949,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                   ],
                                 ),
                               );
-                            }).toList(),
+                            }),
                           ],
                         ),
                       ),

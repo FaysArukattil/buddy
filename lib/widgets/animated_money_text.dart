@@ -28,9 +28,15 @@ class AnimatedMoneyText extends StatelessWidget {
         final formatted = compact
             ? FormatUtils.formatCurrency(animatedValue.abs(), compact: true)
             : FormatUtils.formatCurrencyFull(animatedValue.abs());
-        return Text(
-          '$sign$formatted',
-          style: style,
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            '$sign$formatted',
+            style: style,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         );
       },
     );

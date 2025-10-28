@@ -13,11 +13,15 @@ class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  State<ProfileScreen> createState() => ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen>
+class ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
+  void refreshData() {
+    _loadProfile();
+  }
+
   final _nameController = TextEditingController();
   final FocusNode _nameFocus = FocusNode();
   String _email = '';
@@ -58,18 +62,23 @@ class _ProfileScreenState extends State<ProfileScreen>
     final email = prefs.getString('email') ?? '';
     final savedName = prefs.getString('name');
     final imgPath = prefs.getString('profile_image_path');
-    
-    // Load all-time totals from database
+
+    // Load current month totals from database (like Current Balance)
     final repo = TransactionRepository();
     final rows = await repo.getAll();
+    final now = DateTime.now();
     double income = 0, expense = 0;
     for (final r in rows) {
-      final amt = (r['amount'] as num).toDouble();
-      final type = (r['type'] as String).toLowerCase();
-      if (type == 'income') {
-        income += amt;
-      } else {
-        expense += amt;
+      final dt = DateTime.tryParse(r['date'] as String) ?? now;
+      // Only count transactions from current month
+      if (dt.year == now.year && dt.month == now.month) {
+        final amt = (r['amount'] as num).toDouble();
+        final type = (r['type'] as String).toLowerCase().trim();
+        if (type == 'income') {
+          income += amt;
+        } else if (type == 'expense') {
+          expense += amt;
+        }
       }
     }
 
@@ -94,6 +103,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: source, imageQuality: 85);
     if (picked != null) {
+      if (!mounted) return;
       setState(() => _imagePath = picked.path);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('profile_image_path', picked.path);
@@ -106,9 +116,12 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (_imagePath != null) {
       await prefs.setString('profile_image_path', _imagePath!);
     }
+
+    if (!mounted) return;
+
     setState(() => _editing = false);
 
-    // ignore: use_build_context_synchronously
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text('Profile updated successfully!'),
@@ -120,7 +133,149 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  String _formatCurrency(double v) => FormatUtils.formatCurrency(v, compact: true);
+  String _formatCurrency(double v) =>
+      FormatUtils.formatCurrency(v, compact: true);
+
+  Future<void> _clearThisMonthTransactions() async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear This Month\'s Transactions?'),
+        content: const Text(
+          'This will permanently delete all transactions from this month. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final repo = TransactionRepository();
+      final rows = await repo.getAll();
+      final now = DateTime.now();
+
+      // Delete all transactions from current month
+      for (final r in rows) {
+        final dateStr = r['date'] as String?;
+        if (dateStr == null) continue;
+        final dt = DateTime.tryParse(dateStr);
+        if (dt != null && dt.year == now.year && dt.month == now.month) {
+          await repo.delete(r['id'] as int);
+        }
+      }
+
+      if (!mounted) return;
+
+      // Refresh data
+      await _loadProfile();
+
+      // ignore: use_build_context_synchronously
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('This month\'s transactions cleared'),
+          backgroundColor: AppColors.income,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Failed to clear transactions'),
+          backgroundColor: AppColors.expense,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _clearAllData() async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear All Data?'),
+        content: const Text(
+          'This will permanently delete ALL transactions and profile data. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete Everything'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      // Clear all transactions
+      final repo = TransactionRepository();
+      final rows = await repo.getAll();
+      for (final r in rows) {
+        await repo.delete(r['id'] as int);
+      }
+
+      // Clear profile data
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('name');
+      await prefs.remove('profile_image_path');
+
+      if (!mounted) return;
+
+      // Reset state
+      setState(() {
+        _nameController.text = '';
+        _imagePath = null;
+        _totalIncome = 0;
+        _totalExpense = 0;
+      });
+
+      await _loadProfile();
+
+      // ignore: use_build_context_synchronously
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('All data cleared'),
+          backgroundColor: AppColors.income,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Failed to clear data'),
+          backgroundColor: AppColors.expense,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 
   String _todayLabel() {
     final now = DateTime.now();
@@ -624,7 +779,160 @@ class _ProfileScreenState extends State<ProfileScreen>
                       ),
                     ),
 
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 30),
+
+                    // Data Management Section
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Data Management',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Clear This Month's Transactions
+                          Material(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            child: InkWell(
+                              onTap: _clearThisMonthTransactions,
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: Colors.orange.shade200,
+                                    width: 1.5,
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.shade50,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Icon(
+                                        Icons.delete_sweep_rounded,
+                                        color: Colors.orange.shade700,
+                                        size: 22,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Clear This Month',
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Delete all transactions from current month',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.chevron_right_rounded,
+                                      color: Colors.grey.shade400,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // Clear All Data
+                          Material(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            child: InkWell(
+                              onTap: _clearAllData,
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: Colors.red.shade200,
+                                    width: 1.5,
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.shade50,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Icon(
+                                        Icons.delete_forever_rounded,
+                                        color: Colors.red.shade700,
+                                        size: 22,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Clear All Data',
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Delete all transactions and profile data',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.chevron_right_rounded,
+                                      color: Colors.grey.shade400,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 30),
                   ],
                 ),
               ),

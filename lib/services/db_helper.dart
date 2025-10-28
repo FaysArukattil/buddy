@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -9,23 +10,39 @@ class DatabaseHelper {
   bool _isInitialized = false;
 
   Future<Database> get database async {
-    if (_database != null) return _database!;
+    if (_database != null && _database!.isOpen) {
+      return _database!;
+    }
     await initdb();
     return _database!;
   }
 
   Future<void> initdb() async {
-    if (_isInitialized) return;
-    _database = await openDatabase(
-      join(await getDatabasesPath(), 'user.db'),
-      version: 1,
-      onConfigure: (db) async {
-        await db.execute('PRAGMA foreign_keys = ON');
-      },
-      onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
-    );
-    _isInitialized = true;
+    if (_isInitialized && _database != null && _database!.isOpen) {
+      return;
+    }
+
+    try {
+      final dbPath = join(await getDatabasesPath(), 'user.db');
+
+      _database = await openDatabase(
+        dbPath,
+        version: 1,
+        readOnly: false, // Ensure database is writable
+        singleInstance: true,
+        onConfigure: (db) async {
+          await db.execute('PRAGMA foreign_keys = ON');
+        },
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+      );
+      _isInitialized = true;
+    } catch (e) {
+      debugPrint('Error initializing database: $e');
+      _isInitialized = false;
+      _database = null;
+      rethrow;
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
