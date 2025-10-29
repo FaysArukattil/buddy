@@ -8,6 +8,7 @@ import 'package:buddy/utils/colors.dart';
 import 'package:buddy/utils/images.dart';
 import 'package:buddy/utils/format_utils.dart';
 import 'package:buddy/repositories/transaction_repository.dart';
+import 'package:buddy/services/notification_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -34,6 +35,8 @@ class ProfileScreenState extends State<ProfileScreen>
   double _moneyLottieScale = 1.0;
   late final AnimationController _headerController;
   late final Animation<double> _headerBob;
+  bool _autoDetectionEnabled = true;
+  int _autoTransactionCount = 0;
 
   @override
   void initState() {
@@ -90,12 +93,18 @@ class ProfileScreenState extends State<ProfileScreen>
       }
     }
 
+    // Load auto-detection settings
+    final autoEnabled = await NotificationService.isAutoDetectionEnabled();
+    final autoTransactions = await repo.getAutoDetectedTransactions();
+
     setState(() {
       _email = email;
       _nameController.text = displayName;
       _imagePath = imgPath;
       _totalIncome = income;
       _totalExpense = expense;
+      _autoDetectionEnabled = autoEnabled;
+      _autoTransactionCount = autoTransactions.length;
     });
   }
 
@@ -773,6 +782,250 @@ class ProfileScreenState extends State<ProfileScreen>
                               color: AppColors.primary,
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    // Auto-Detection Settings Section
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Auto Transaction Detection',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Enable/Disable Auto-Detection
+                          Material(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: AppColors.primary.withValues(alpha: 0.3),
+                                  width: 1.5,
+                                ),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Icon(
+                                      Icons.notifications_active_rounded,
+                                      color: AppColors.primary,
+                                      size: 22,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Auto-Detect Transactions',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Automatically add transactions from notifications',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Switch(
+                                    value: _autoDetectionEnabled,
+                                    onChanged: (value) async {
+                                      await NotificationService.setAutoDetectionEnabled(value);
+                                      setState(() => _autoDetectionEnabled = value);
+                                      
+                                      if (!mounted) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            value 
+                                              ? 'Auto-detection enabled' 
+                                              : 'Auto-detection disabled',
+                                          ),
+                                          backgroundColor: AppColors.primary,
+                                          behavior: SnackBarBehavior.floating,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          duration: const Duration(seconds: 2),
+                                        ),
+                                      );
+                                    },
+                                    activeTrackColor: AppColors.primary,
+                                    activeThumbColor: Colors.white,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // Request Permission Button
+                          Material(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            child: InkWell(
+                              onTap: () async {
+                                await NotificationService.requestNotificationAccess();
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: const Text(
+                                      'Please enable notification access in settings',
+                                    ),
+                                    backgroundColor: AppColors.secondary,
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: AppColors.secondary.withValues(alpha: 0.3),
+                                    width: 1.5,
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.secondary.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Icon(
+                                        Icons.settings_rounded,
+                                        color: AppColors.secondary,
+                                        size: 22,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Notification Permission',
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Grant notification access to enable auto-detection',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.chevron_right_rounded,
+                                      color: Colors.grey.shade400,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // Auto-Transaction Stats
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  AppColors.income.withValues(alpha: 0.1),
+                                  AppColors.primary.withValues(alpha: 0.05),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: AppColors.income.withValues(alpha: 0.3),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.income.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    Icons.auto_awesome_rounded,
+                                    color: AppColors.income,
+                                    size: 22,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Auto-Detected Transactions',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '$_autoTransactionCount transactions detected automatically',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'dart:ui';
 // ignore: depend_on_referenced_packages
 import 'package:fl_chart/fl_chart.dart';
 import 'package:buddy/utils/colors.dart';
 import 'package:buddy/utils/format_utils.dart';
 import 'package:buddy/repositories/transaction_repository.dart';
+import 'package:buddy/services/pdf_service.dart';
+import 'package:intl/intl.dart';
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
@@ -17,9 +20,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   int _selectedTab = 0;
   String _type = 'Expense';
   final List<String> _tabs = const ['Day', 'Week', 'Month', 'Year'];
+  bool _isDownloading = false;
+  DateTime _selectedDate = DateTime.now();
 
   late final TransactionRepository _repo;
   List<Map<String, Object?>> _rows = [];
+  
+  // Cache for computed data
+  List<double>? _cachedPoints;
+  List<String>? _cachedLabels;
+  double? _cachedTotal;
+  List<Map<String, dynamic>>? _cachedTopCategories;
+  String _cacheKey = '';
 
   @override
   void initState() {
@@ -31,7 +43,24 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Future<void> _load() async {
     final rows = await _repo.getAll();
     if (!mounted) return;
-    setState(() => _rows = rows);
+    setState(() {
+      _rows = rows;
+      _invalidateCache();
+    });
+  }
+  
+  // Invalidate cache when data changes
+  void _invalidateCache() {
+    _cachedPoints = null;
+    _cachedLabels = null;
+    _cachedTotal = null;
+    _cachedTopCategories = null;
+    _cacheKey = '';
+  }
+  
+  // Get cache key based on current state
+  String _getCacheKey() {
+    return '$_selectedTab-$_type-${_selectedDate.toString()}-${_rows.length}';
   }
 
   List<double> _computePoints() {
@@ -182,12 +211,413 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   String _formatCurrency(double v) =>
       FormatUtils.formatCurrency(v, compact: true);
 
+  // Download PDF based on current view
+  Future<void> _downloadCurrentView() async {
+    setState(() => _isDownloading = true);
+    
+    try {
+      final now = _selectedDate;
+      List<Map<String, dynamic>> filteredTransactions = [];
+      String title = '';
+      String subtitle = '';
+      
+      switch (_selectedTab) {
+        case 0: // Day
+          filteredTransactions = _rows.where((t) {
+            final date = DateTime.tryParse(t['date'] as String) ?? DateTime.now();
+            return date.year == now.year &&
+                   date.month == now.month &&
+                   date.day == now.day;
+          }).cast<Map<String, dynamic>>().toList();
+          title = 'Daily Report';
+          subtitle = DateFormat('MMM dd, yyyy').format(now);
+          break;
+          
+        case 1: // Week
+          final startOfWeek = now.subtract(Duration(days: (now.weekday - 1) % 7));
+          final start = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
+          final end = start.add(const Duration(days: 7));
+          
+          filteredTransactions = _rows.where((t) {
+            final date = DateTime.tryParse(t['date'] as String) ?? DateTime.now();
+            return date.isAfter(start.subtract(const Duration(milliseconds: 1))) &&
+                   date.isBefore(end);
+          }).cast<Map<String, dynamic>>().toList();
+          title = 'Weekly Report';
+          subtitle = '${DateFormat('MMM dd').format(start)} - ${DateFormat('MMM dd, yyyy').format(end)}';
+          break;
+          
+        case 2: // Month
+          filteredTransactions = _rows.where((t) {
+            final date = DateTime.tryParse(t['date'] as String) ?? DateTime.now();
+            return date.year == now.year && date.month == now.month;
+          }).cast<Map<String, dynamic>>().toList();
+          title = 'Monthly Report';
+          subtitle = DateFormat('MMMM yyyy').format(now);
+          break;
+          
+        case 3: // Year
+          filteredTransactions = _rows.where((t) {
+            final date = DateTime.tryParse(t['date'] as String) ?? DateTime.now();
+            return date.year == now.year;
+          }).cast<Map<String, dynamic>>().toList();
+          title = 'Yearly Report';
+          subtitle = DateFormat('yyyy').format(now);
+          break;
+      }
+      
+      if (filteredTransactions.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No transactions found for this period'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+      
+      final file = await PdfService.generateMultipleTransactionsPdf(
+        transactions: filteredTransactions,
+        title: title,
+        subtitle: subtitle,
+      );
+      
+      if (!mounted) return;
+      _showPdfOptions(file);
+      
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error generating PDF: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isDownloading = false);
+      }
+    }
+  }
+
+  // Show date picker based on tab
+  Future<void> _showDatePicker() async {
+    switch (_selectedTab) {
+      case 0: // Day - show date picker
+        await _showDayPicker();
+        break;
+      case 1: // Week - show week picker (date picker with week calculation)
+        await _showWeekPicker();
+        break;
+      case 2: // Month - show month picker
+        await _showMonthPicker();
+        break;
+      case 3: // Year - show year picker
+        await _showYearPicker();
+        break;
+    }
+  }
+
+  Future<void> _showDayPicker() async {
+    await showCupertinoModalPopup(
+      context: context,
+      builder: (context) => Container(
+        height: 300,
+        color: Colors.white,
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  CupertinoButton(
+                    child: const Text('Cancel'),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const Text(
+                    'Select Day',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  CupertinoButton(
+                    child: const Text('Done'),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      setState(() {});
+                    },
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: CupertinoDatePicker(
+                mode: CupertinoDatePickerMode.date,
+                initialDateTime: _selectedDate,
+                maximumDate: DateTime.now(),
+                onDateTimeChanged: (date) {
+                  _selectedDate = date;
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showWeekPicker() async {
+    await showCupertinoModalPopup(
+      context: context,
+      builder: (context) => Container(
+        height: 300,
+        color: Colors.white,
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  CupertinoButton(
+                    child: const Text('Cancel'),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const Text(
+                    'Select Week',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  CupertinoButton(
+                    child: const Text('Done'),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      setState(() {});
+                    },
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: CupertinoDatePicker(
+                mode: CupertinoDatePickerMode.date,
+                initialDateTime: _selectedDate,
+                maximumDate: DateTime.now(),
+                onDateTimeChanged: (date) {
+                  _selectedDate = date;
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showMonthPicker() async {
+    await showCupertinoModalPopup(
+      context: context,
+      builder: (context) => Container(
+        height: 300,
+        color: Colors.white,
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  CupertinoButton(
+                    child: const Text('Cancel'),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const Text(
+                    'Select Month',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  CupertinoButton(
+                    child: const Text('Done'),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      setState(() {});
+                    },
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: CupertinoDatePicker(
+                mode: CupertinoDatePickerMode.monthYear,
+                initialDateTime: _selectedDate,
+                maximumDate: DateTime.now(),
+                onDateTimeChanged: (date) {
+                  _selectedDate = date;
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showYearPicker() async {
+    int selectedYear = _selectedDate.year;
+    
+    await showCupertinoModalPopup(
+      context: context,
+      builder: (context) => Container(
+        height: 300,
+        color: Colors.white,
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  CupertinoButton(
+                    child: const Text('Cancel'),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const Text(
+                    'Select Year',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  CupertinoButton(
+                    child: const Text('Done'),
+                    onPressed: () {
+                      _selectedDate = DateTime(selectedYear, 1, 1);
+                      Navigator.pop(context);
+                      setState(() {});
+                    },
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: CupertinoPicker(
+                scrollController: FixedExtentScrollController(
+                  initialItem: DateTime.now().year - selectedYear,
+                ),
+                itemExtent: 40,
+                onSelectedItemChanged: (index) {
+                  selectedYear = DateTime.now().year - index;
+                },
+                children: List.generate(
+                  DateTime.now().year - 2020 + 1,
+                  (index) {
+                    final year = DateTime.now().year - index;
+                    return Center(
+                      child: Text(
+                        year.toString(),
+                        style: const TextStyle(fontSize: 22),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPdfOptions(file) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'PDF Generated Successfully!',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.open_in_new, color: AppColors.primary),
+              title: const Text('Open PDF'),
+              onTap: () {
+                Navigator.pop(context);
+                PdfService.openPdf(file);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.share, color: AppColors.secondary),
+              title: const Text('Share PDF'),
+              onTap: () {
+                Navigator.pop(context);
+                PdfService.sharePdf(file);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.print, color: AppColors.income),
+              title: const Text('Print PDF'),
+              onTap: () {
+                Navigator.pop(context);
+                PdfService.printPdf(file);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final points = _computePoints();
-    final labels = _computeLabels();
-    final total = _computeTotal();
-    final topCategories = _computeTopCategories();
+    // Use cached data if available
+    final currentKey = _getCacheKey();
+    if (currentKey != _cacheKey) {
+      _cacheKey = currentKey;
+      _cachedPoints = _computePoints();
+      _cachedLabels = _computeLabels();
+      _cachedTotal = _computeTotal();
+      _cachedTopCategories = _computeTopCategories();
+    }
+    
+    final points = _cachedPoints!;
+    final labels = _cachedLabels!;
+    final total = _cachedTotal!;
+    final topCategories = _cachedTopCategories!;
     final hasData = points.any((p) => p > 0);
 
     return Scaffold(
@@ -200,6 +630,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
+                  // Date Picker Button (Left side)
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -214,13 +645,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     ),
                     child: IconButton(
                       icon: const Icon(
-                        Icons.arrow_back_ios_new,
+                        Icons.calendar_today,
                         color: AppColors.textPrimary,
                         size: 20,
                       ),
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: _showDatePicker,
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  // Title
                   const Expanded(
                     child: Text(
                       'Statistics',
@@ -232,25 +665,41 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  // Download Button (Right side)
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      gradient: LinearGradient(
+                        colors: [
+                          AppColors.primary,
+                          AppColors.primary.withValues(alpha: 0.8),
+                        ],
+                      ),
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
+                          color: AppColors.primary.withValues(alpha: 0.3),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
                       ],
                     ),
                     child: IconButton(
-                      icon: const Icon(
-                        Icons.ios_share,
-                        color: AppColors.textPrimary,
-                        size: 20,
-                      ),
-                      onPressed: () {},
+                      icon: _isDownloading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.download_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                      onPressed: _isDownloading ? null : _downloadCurrentView,
                     ),
                   ),
                 ],
@@ -281,164 +730,199 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                             ),
                           ],
                         ),
-                        child: Row(
-                          children: List.generate(_tabs.length, (i) {
-                            final selected = i == _selectedTab;
-                            return Expanded(
-                              child: GestureDetector(
-                                onTap: () => setState(() => _selectedTab = i),
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 300),
-                                  curve: Curves.easeOutCubic,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
+                        child: Stack(
+                          children: [
+                            // Animated indicator background
+                            AnimatedPositioned(
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOut,
+                              left: (_selectedTab * (MediaQuery.of(context).size.width - 48) / 4) + 4,
+                              top: 4,
+                              width: (MediaQuery.of(context).size.width - 48) / 4 - 8,
+                              height: 42,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      AppColors.primary.withValues(alpha: 0.38),
+                                      AppColors.secondary.withValues(alpha: 0.30),
+                                    ],
                                   ),
-                                  decoration: BoxDecoration(
-                                    gradient: selected
-                                        ? LinearGradient(
-                                            colors: [
-                                              AppColors.primary,
-                                              AppColors.primary.withValues(
-                                                alpha: 0.8,
-                                              ),
-                                            ],
-                                          )
-                                        : null,
-                                    borderRadius: BorderRadius.circular(12),
-                                    boxShadow: selected
-                                        ? [
-                                            BoxShadow(
-                                              color: AppColors.primary
-                                                  .withValues(alpha: 0.3),
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 4),
-                                            ),
-                                          ]
-                                        : null,
+                                  border: Border.all(
+                                    color: AppColors.secondary.withValues(alpha: 0.35),
+                                    width: 1,
                                   ),
-                                  child: Text(
-                                    _tabs[i],
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: selected
-                                          ? Colors.white
-                                          : AppColors.textSecondary,
-                                      fontWeight: selected
-                                          ? FontWeight.bold
-                                          : FontWeight.w600,
-                                      fontSize: 14,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.primary.withValues(alpha: 0.2),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
                                     ),
-                                  ),
+                                  ],
                                 ),
                               ),
-                            );
-                          }),
+                            ),
+                            // Tab buttons
+                            Row(
+                              children: List.generate(_tabs.length, (i) {
+                                final selected = i == _selectedTab;
+                                return Expanded(
+                                  child: GestureDetector(
+                                    onTap: () => setState(() {
+                                      _selectedTab = i;
+                                      _selectedDate = DateTime.now(); // Reset date when changing tabs
+                                    }),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      child: Text(
+                                        _tabs[i],
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: selected
+                                              ? Colors.white
+                                              : AppColors.textSecondary,
+                                          fontWeight: selected
+                                              ? FontWeight.bold
+                                              : FontWeight.w600,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ],
                         ),
                       ),
                     ),
 
                     const SizedBox(height: 20),
 
-                    // Type dropdown
+                    // Type Toggle (Expense/Income)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: AppColors.primary.withValues(alpha: 0.2),
-                                width: 1.5,
+                      child: Container(
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: AppColors.secondary.withValues(alpha: 0.24),
+                            width: 1,
+                          ),
+                        ),
+                        child: Stack(
+                          children: [
+                            // Animated indicator
+                            AnimatedPositioned(
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOut,
+                              left: _type == 'Expense' ? 4 : (MediaQuery.of(context).size.width - 48) / 2 + 4,
+                              top: 4,
+                              width: (MediaQuery.of(context).size.width - 48) / 2 - 8,
+                              height: 42,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      AppColors.primary.withValues(alpha: 0.38),
+                                      AppColors.secondary.withValues(alpha: 0.30),
+                                    ],
+                                  ),
+                                  border: Border.all(
+                                    color: AppColors.secondary.withValues(alpha: 0.35),
+                                    width: 1,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.primary.withValues(alpha: 0.2),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.05),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
+                            ),
+                            // Buttons
+                            Row(
+                              children: [
+                                // Expense Button
+                                Expanded(
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: () => setState(() => _type = 'Expense'),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.trending_down_rounded,
+                                            color: _type == 'Expense'
+                                                ? AppColors.expense
+                                                : AppColors.textSecondary,
+                                            size: 18,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'Expense',
+                                            style: TextStyle(
+                                              color: _type == 'Expense'
+                                                  ? Colors.white
+                                                  : AppColors.textSecondary,
+                                              fontWeight: _type == 'Expense'
+                                                  ? FontWeight.bold
+                                                  : FontWeight.w600,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Income Button
+                                Expanded(
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: () => setState(() => _type = 'Income'),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.trending_up_rounded,
+                                            color: _type == 'Income'
+                                                ? AppColors.income
+                                                : AppColors.textSecondary,
+                                            size: 18,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'Income',
+                                            style: TextStyle(
+                                              color: _type == 'Income'
+                                                  ? Colors.white
+                                                  : AppColors.textSecondary,
+                                              fontWeight: _type == 'Income'
+                                                  ? FontWeight.bold
+                                                  : FontWeight.w600,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: _type,
-                                icon: Icon(
-                                  Icons.keyboard_arrow_down_rounded,
-                                  color: AppColors.primary,
-                                ),
-                                style: const TextStyle(
-                                  color: AppColors.textPrimary,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                ),
-                                dropdownColor: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                elevation: 8,
-                                menuMaxHeight: 200,
-                                items: [
-                                  DropdownMenuItem(
-                                    value: 'Expense',
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(6),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.expense.withValues(
-                                              alpha: 0.1,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                          ),
-                                          child: Icon(
-                                            Icons.trending_down_rounded,
-                                            color: AppColors.expense,
-                                            size: 18,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        const Text('Expense'),
-                                      ],
-                                    ),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'Income',
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(6),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.income.withValues(
-                                              alpha: 0.1,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                          ),
-                                          child: Icon(
-                                            Icons.trending_up_rounded,
-                                            color: AppColors.income,
-                                            size: 18,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        const Text('Income'),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                                onChanged: (v) =>
-                                    setState(() => _type = v ?? _type),
-                              ),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
 
@@ -562,8 +1046,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                 16,
                                 16,
                               ),
-                              child: hasData
-                                  ? LineChart(
+                              child: RepaintBoundary(
+                                child: hasData
+                                    ? LineChart(
                                       LineChartData(
                                         gridData: FlGridData(
                                           show: true,
@@ -814,6 +1299,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                         ],
                                       ),
                                     ),
+                              ),
                             ),
                           ),
                         ),

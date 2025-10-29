@@ -5,8 +5,10 @@ import 'package:buddy/views/screens/bottomnavbarscreen/profile_screen.dart';
 import 'package:buddy/views/screens/transaction_detail_screen.dart';
 import 'package:buddy/views/screens/filtered_transactions_screen.dart';
 import 'package:buddy/repositories/transaction_repository.dart';
+import 'package:buddy/services/notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:notification_listener_service/notification_listener_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -48,6 +50,9 @@ class HomeScreenState extends State<HomeScreen>
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
     _controller.repeat(reverse: true);
     
+    // Check and show notification permission popup on first launch
+    _checkNotificationPermission();
+    
     // Load data after frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshFromDb();
@@ -66,6 +71,204 @@ class HomeScreenState extends State<HomeScreen>
     debugPrint('🔄 HOME SCREEN: External refresh requested');
     _needsRefresh = true;
     await _refreshFromDb();
+  }
+
+  // Check and show notification permission popup on first launch
+  Future<void> _checkNotificationPermission() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasAskedPermission = prefs.getBool('has_asked_notification_permission') ?? false;
+    
+    if (!hasAskedPermission && mounted) {
+      // Wait a bit for the screen to fully load
+      await Future.delayed(const Duration(milliseconds: 1000));
+      
+      if (!mounted) return;
+      
+      // Check if permission is already granted
+      final isGranted = await NotificationListenerService.isPermissionGranted();
+      
+      if (!isGranted && mounted) {
+        // Show the permission dialog
+        _showNotificationPermissionDialog();
+        
+        // Mark that we've asked
+        await prefs.setBool('has_asked_notification_permission', true);
+      }
+    }
+  }
+
+  void _showNotificationPermissionDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.notifications_active,
+                color: AppColors.primary,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Enable Auto-Tracking',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Buddy needs Notification Access permission to read SMS and UPI notifications for automatic transaction tracking.',
+              style: TextStyle(fontSize: 15),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.income.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.income.withOpacity(0.3),
+                ),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.check_circle, color: AppColors.income, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Automatic transaction detection',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.check_circle, color: AppColors.income, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Smart categorization',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.check_circle, color: AppColors.income, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'No manual entry needed',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.blue, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'This opens Settings → Notification Access. Find "Buddy" in the list and toggle it ON to allow reading notifications.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'You can enable this later from Profile → Settings.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Not Now',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              // Show a snackbar with instructions
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text(
+                      'Find "Buddy" in Notification Access and toggle it ON',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    backgroundColor: AppColors.primary,
+                    duration: const Duration(seconds: 5),
+                    action: SnackBarAction(
+                      label: 'GOT IT',
+                      textColor: Colors.white,
+                      onPressed: () {},
+                    ),
+                  ),
+                );
+              }
+              // Open notification settings
+              await NotificationService.requestNotificationAccess();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: const Text(
+              'Open Settings',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _refreshFromDb() async {
@@ -257,9 +460,10 @@ class HomeScreenState extends State<HomeScreen>
                             children: [
                               Text(
                                 _greeting(),
-                                style: TextStyle(
+                                style: const TextStyle(
                                   fontSize: 14,
-                                  color: Colors.grey.shade600,
+                                  color: Colors.white70,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -268,7 +472,7 @@ class HomeScreenState extends State<HomeScreen>
                                 style: const TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.bold,
-                                  color: AppColors.textPrimary,
+                                  color: Colors.white,
                                 ),
                               ),
                             ],

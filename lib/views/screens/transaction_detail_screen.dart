@@ -4,6 +4,7 @@ import 'package:buddy/utils/images.dart';
 import 'package:buddy/widgets/animated_money_text.dart';
 import 'package:buddy/repositories/transaction_repository.dart';
 import 'package:buddy/views/screens/add_transaction_screen.dart';
+import 'package:buddy/services/pdf_service.dart';
 
 class TransactionDetailScreen extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -18,6 +19,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _bobController;
   late final Animation<double> _bobAnimation;
+  bool _isDownloading = false;
 
   bool get _isIncome => (widget.data['type'] as String).toLowerCase().trim() == 'income';
 
@@ -69,11 +71,27 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
                   elevation: 8,
                   shadowColor: const Color(0x33000000),
                 ),
-                onPressed: () {},
-                child: const Text(
-                  'Download',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                ),
+                onPressed: _isDownloading ? null : _downloadPdf,
+                child: _isDownloading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.download_rounded, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Download PDF',
+                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                          ),
+                        ],
+                      ),
               ),
             ),
           ),
@@ -485,6 +503,79 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen>
       'Dec',
     ];
     return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+  }
+
+  Future<void> _downloadPdf() async {
+    setState(() => _isDownloading = true);
+    
+    try {
+      // Generate PDF
+      final file = await PdfService.generateSingleTransactionPdf(widget.data);
+      
+      if (!mounted) return;
+      
+      // Show options dialog
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (context) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'PDF Generated Successfully!',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Icon(Icons.open_in_new, color: AppColors.primary),
+                title: const Text('Open PDF'),
+                onTap: () {
+                  Navigator.pop(context);
+                  PdfService.openPdf(file);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.share, color: AppColors.secondary),
+                title: const Text('Share PDF'),
+                onTap: () {
+                  Navigator.pop(context);
+                  PdfService.sharePdf(file);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.print, color: AppColors.income),
+                title: const Text('Print PDF'),
+                onTap: () {
+                  Navigator.pop(context);
+                  PdfService.printPdf(file);
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error generating PDF: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isDownloading = false);
+      }
+    }
   }
 
   Future<void> _openEdit() async {

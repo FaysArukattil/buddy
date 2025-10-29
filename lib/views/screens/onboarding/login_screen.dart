@@ -216,6 +216,45 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
 
                   const SizedBox(height: 32),
+                  
+                  // Skip button for guest mode
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        // Save guest user
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setBool('isLoggedIn', true);
+                        await prefs.setString('userName', 'Guest User');
+                        await prefs.setString('userEmail', 'guest@buddy.app');
+                        await prefs.setBool('isGuest', true);
+                        
+                        if (!mounted) return;
+                        
+                        // Navigate to main screen
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const BottomNavbarScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(
+                        Icons.arrow_forward_rounded,
+                        color: Colors.grey,
+                        size: 18,
+                      ),
+                      label: const Text(
+                        'Continue as Guest',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 16),
                 ],
               ),
             ),

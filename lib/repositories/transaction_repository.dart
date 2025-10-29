@@ -37,4 +37,13 @@ class TransactionRepository {
   Future<Map<String, Object?>?> getById(int id) async {
     return dbh.getTransactionById(id);
   }
+
+  // Auto-detection methods
+  Future<List<Map<String, Object?>>> getAutoDetectedTransactions() async {
+    return dbh.getAutoDetectedTransactions();
+  }
+
+  Future<bool> isDuplicateTransaction(String hash) async {
+    return dbh.isDuplicateTransaction(hash);
+  }
 }
