@@ -17,6 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -33,13 +34,32 @@ class _LoginScreenState extends State<LoginScreen> {
       await pref.setString("email", email);
       await pref.setString("password", password);
       await pref.setBool('is_logged_in', true);
+      await pref.setBool('isGuest', false); // Not a guest
 
       Navigator.pushReplacement(
         // ignore: use_build_context_synchronously
         context,
-        MaterialPageRoute(builder: (context) => BottomNavbarScreen()),
+        MaterialPageRoute(builder: (context) => const BottomNavbarScreen()),
       );
     }
+  }
+
+  Future<void> _handleGuestLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Save guest user data with consistent key names
+    await prefs.setBool('is_logged_in', true);
+    await prefs.setString('name', 'Guest User');
+    await prefs.setString('email', 'guest@buddy.app');
+    await prefs.setBool('isGuest', true);
+
+    if (!mounted) return;
+
+    // Navigate to main screen
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const BottomNavbarScreen()),
+    );
   }
 
   @override
@@ -198,7 +218,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           Navigator.pushReplacement(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => SignUpScreen(),
+                              builder: (context) => const SignUpScreen(),
                             ),
                           );
                         },
@@ -216,28 +236,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
 
                   const SizedBox(height: 32),
-                  
+
                   // Skip button for guest mode
                   Center(
                     child: TextButton.icon(
-                      onPressed: () async {
-                        // Save guest user
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.setBool('isLoggedIn', true);
-                        await prefs.setString('userName', 'Guest User');
-                        await prefs.setString('userEmail', 'guest@buddy.app');
-                        await prefs.setBool('isGuest', true);
-                        
-                        if (!mounted) return;
-                        
-                        // Navigate to main screen
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const BottomNavbarScreen(),
-                          ),
-                        );
-                      },
+                      onPressed: _handleGuestLogin,
                       icon: const Icon(
                         Icons.arrow_forward_rounded,
                         color: Colors.grey,
@@ -253,7 +256,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-                  
+
                   const SizedBox(height: 16),
                 ],
               ),
