@@ -25,7 +25,10 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen>
   late final AnimationController _fabController;
   late final Animation<double> _fabBob;
   final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>();
-  final GlobalKey<ProfileScreenState> _profileKey = GlobalKey<ProfileScreenState>();
+  final GlobalKey<StatisticsScreenState> _statisticsKey =
+      GlobalKey<StatisticsScreenState>();
+  final GlobalKey<ProfileScreenState> _profileKey =
+      GlobalKey<ProfileScreenState>();
 
   @override
   void initState() {
@@ -63,8 +66,18 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen>
           PageView(
             controller: _pageController,
             physics: const BouncingScrollPhysics(),
-            onPageChanged: (i) => setState(() => _currentIndex = i),
-            children: [HomeScreen(key: _homeKey), const StatisticsScreen(), ProfileScreen(key: _profileKey)],
+            onPageChanged: (i) {
+              setState(() => _currentIndex = i);
+              // Refresh statistics screen when navigating to it
+              if (i == 1) {
+                _statisticsKey.currentState?.refreshData();
+              }
+            },
+            children: [
+              HomeScreen(key: _homeKey),
+              StatisticsScreen(key: _statisticsKey),
+              ProfileScreen(key: _profileKey),
+            ],
           ),
 
           // Glassmorphic bottom bar
@@ -274,23 +287,37 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen>
                           );
                         },
                       );
-                      // Refresh home and profile screens if transaction was added
+                      // Refresh all screens if transaction was added
                       if (result == true && mounted) {
-                        debugPrint('💾 Transaction saved, refreshing screens...');
+                        debugPrint(
+                          '💾 Transaction saved, refreshing all screens...',
+                        );
                         final homeState = _homeKey.currentState;
+                        final statisticsState = _statisticsKey.currentState;
                         final profileState = _profileKey.currentState;
-                        debugPrint('Home state: ${homeState != null ? "Found ✓" : "NULL ✗"}');
-                        debugPrint('Profile state: ${profileState != null ? "Found ✓" : "NULL ✗"}');
-                        
-                        // Refresh both screens
+
+                        debugPrint(
+                          'Home state: ${homeState != null ? "Found ✓" : "NULL ✗"}',
+                        );
+                        debugPrint(
+                          'Statistics state: ${statisticsState != null ? "Found ✓" : "NULL ✗"}',
+                        );
+                        debugPrint(
+                          'Profile state: ${profileState != null ? "Found ✓" : "NULL ✗"}',
+                        );
+
+                        // Refresh all screens
                         if (homeState != null) {
                           await homeState.refreshData();
+                        }
+                        if (statisticsState != null) {
+                          await statisticsState.refreshData();
                         }
                         if (profileState != null) {
                           profileState.refreshData();
                         }
-                        
-                        debugPrint('✅ Both screens refresh triggered');
+
+                        debugPrint('✅ All screens refresh triggered');
                       }
                     },
                     child: Container(
@@ -329,6 +356,12 @@ class _BottomNavbarScreenState extends State<BottomNavbarScreen>
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeOut,
     );
+    // Refresh statistics screen when navigating to it
+    if (index == 1) {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        _statisticsKey.currentState?.refreshData();
+      });
+    }
   }
 }
 
