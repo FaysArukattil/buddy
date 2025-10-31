@@ -1,100 +1,61 @@
 package com.example.buddy
 
-import android.content.Intent
-import android.provider.Settings
-import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import android.content.Intent
+import android.util.Log
 
-class MainActivity: FlutterActivity() {
-    
-    private val CHANNEL = "notification_channel"
-    private var notificationChannel: MethodChannel? = null
-    
+class MainActivity : FlutterActivity() {
+
     companion object {
-        private const val TAG = "MainActivity"
         var instance: MainActivity? = null
+        private const val CHANNEL = "notification_channel"
     }
-    
+
+    private lateinit var channel: MethodChannel
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        
-        // Set the static instance so NotificationListener can access it
         instance = this
-        Log.d(TAG, "✅ MainActivity instance set")
-        
-        // Create MethodChannel for communication with Flutter
-        notificationChannel = MethodChannel(
+
+        // Create the MethodChannel for Flutter <-> Android communication
+        channel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             CHANNEL
-        ).apply {
-            setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "checkNotificationPermission" -> {
-                        val hasPermission = isNotificationServiceEnabled()
-                        Log.d(TAG, "📋 Permission check: $hasPermission")
-                        result.success(hasPermission)
-                    }
-                    "requestNotificationPermission" -> {
-                        openNotificationSettings()
-                        result.success(true)
-                    }
-                    else -> {
-                        Log.w(TAG, "⚠️ Unknown method: ${call.method}")
-                        result.notImplemented()
-                    }
+        )
+
+        channel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startNotificationService" -> {
+                    Log.d("MainActivity", "Starting NotificationListener service...")
+                    startService(Intent(this, NotificationListener::class.java))
+                    result.success(true)
                 }
+                else -> result.notImplemented()
             }
         }
-        
-        Log.d(TAG, "✅ MethodChannel configured: $CHANNEL")
+
+        Log.d("MainActivity", "✅ MethodChannel '$CHANNEL' ready")
     }
-    
-    // Called by NotificationListener to send data to Flutter
+
+    // Called by NotificationListener.kt
     fun sendNotificationToFlutter(packageName: String, title: String, content: String) {
-        Log.d(TAG, "📤 Sending to Flutter:")
-        Log.d(TAG, "   📱 Package: $packageName")
-        Log.d(TAG, "   📝 Title: $title")
-        Log.d(TAG, "   💬 Content: ${content.take(50)}...")
-        
+        Log.d("MainActivity", "📤 Sending notification to Flutter: $title -> $content")
         try {
-            notificationChannel?.invokeMethod("onNotificationReceived", mapOf(
-                "packageName" to packageName,
+            val map = mapOf(
+                "package" to packageName,
                 "title" to title,
                 "content" to content
-            ))
-            Log.d(TAG, "✅ Successfully invoked Flutter method")
+            )
+            channel.invokeMethod("onNotificationReceived", map)
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error invoking Flutter method: ${e.message}", e)
+            Log.e("MainActivity", "❌ Error sending notification to Flutter: ${e.message}", e)
         }
     }
-    
-    private fun isNotificationServiceEnabled(): Boolean {
-        val enabledListeners = Settings.Secure.getString(
-            contentResolver,
-            "enabled_notification_listeners"
-        )
-        val packageName = packageName
-        val isEnabled = enabledListeners?.contains(packageName) ?: false
-        
-        Log.d(TAG, "🔍 Checking notification permission:")
-        Log.d(TAG, "   📦 Package: $packageName")
-        Log.d(TAG, "   📋 Enabled listeners: $enabledListeners")
-        Log.d(TAG, "   ✅ Is enabled: $isEnabled")
-        
-        return isEnabled
-    }
-    
-    private fun openNotificationSettings() {
-        Log.d(TAG, "🔓 Opening notification settings")
-        val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-        startActivity(intent)
-    }
-    
+
     override fun onDestroy() {
-        super.onDestroy()
         instance = null
-        Log.d(TAG, "❌ MainActivity instance cleared")
+        super.onDestroy()
     }
 }

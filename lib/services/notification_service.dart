@@ -3,11 +3,20 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'db_helper.dart';
 
+typedef OnTransactionDetected =
+    Future<void> Function(Map<String, Object?> transactionMap, String hash);
+
 class NotificationService {
+  // METHOD CHANNEL NAME MATCHES MainActivity.kt
+  static const MethodChannel _nativeChannel = MethodChannel(
+    'notification_channel',
+  );
+
   static StreamSubscription? _notificationSubscription;
   static bool _isListening = false;
 
@@ -84,7 +93,7 @@ class NotificationService {
   /// Start listening - accepts optional callback:
   /// onTransactionDetected(Map<String,Object?> transactionMap, String hash)
   static Future<void> startListening([
-    Future<void> Function(Map<String, Object?>, String)? onTransactionDetected,
+    OnTransactionDetected? onTransactionDetected,
   ]) async {
     if (_isListening) {
       debugPrint('⚠️ NOTIFICATION: Already listening');
@@ -107,6 +116,8 @@ class NotificationService {
     }
 
     debugPrint('🎧 NOTIFICATION: Starting notification listener...');
+
+    // 1) Listen to the notification_listener_service stream (if available)
     try {
       _notificationSubscription = NotificationListenerService
           .notificationsStream
@@ -114,7 +125,7 @@ class NotificationService {
             (event) async {
               try {
                 final result = await _handleNotification(event);
-                // result is { 'transactionMap':..., 'hash': '...' }
+                // If result is not null, optionally propagate to callback
                 if (result != null && onTransactionDetected != null) {
                   final transactionMap =
                       result['transactionMap'] as Map<String, Object?>;
@@ -122,7 +133,7 @@ class NotificationService {
                   await onTransactionDetected(transactionMap, hash);
                 }
               } catch (e) {
-                debugPrint('❌ NOTIFICATION: Error processing event: $e');
+                debugPrint('❌ NOTIFICATION: Error processing stream event: $e');
               }
             },
             onError: (error) {
@@ -133,22 +144,68 @@ class NotificationService {
               _isListening = false;
             },
           );
-
-      _isListening = true;
-      debugPrint('✅ NOTIFICATION: Listener started');
     } catch (e) {
-      debugPrint('❌ NOTIFICATION: Failed to start listener: $e');
-      _isListening = false;
+      debugPrint(
+        '⚠️ NOTIFICATION: Could not attach to notificationsStream: $e',
+      );
     }
+
+    // 2) Also listen to native MethodChannel calls from MainActivity (fallback)
+    _nativeChannel.setMethodCallHandler((call) async {
+      try {
+        debugPrint(
+          '📨 MethodChannel.call.method=${call.method} args=${call.arguments}',
+        );
+        if (call.method == 'onNotificationReceived' ||
+            call.method == 'notification') {
+          final args = call.arguments;
+          Map<String, Object?> mapArgs = {};
+
+          if (args is Map) {
+            args.forEach((k, v) {
+              mapArgs[k.toString()] = v;
+            });
+          }
+
+          debugPrint('📨 MethodChannel event received: $mapArgs');
+
+          final event = {
+            'package': mapArgs['package'] ?? mapArgs['packageName'] ?? '',
+            'title': mapArgs['title'] ?? '',
+            'content':
+                mapArgs['content'] ?? mapArgs['text'] ?? mapArgs['body'] ?? '',
+          };
+
+          final result = await _handleNotification(event);
+          if (result != null && onTransactionDetected != null) {
+            final transactionMap =
+                result['transactionMap'] as Map<String, Object?>;
+            final hash = result['hash'] as String;
+            await onTransactionDetected(transactionMap, hash);
+          }
+        }
+      } catch (e) {
+        debugPrint('❌ NOTIFICATION: Error handling MethodChannel call: $e');
+      }
+    });
+
+    _isListening = true;
+    debugPrint('✅ NOTIFICATION: Listener started (stream + MethodChannel)');
   }
 
   /// Stop listening
   static Future<void> stopListening() async {
     if (!_isListening) return;
-    await _notificationSubscription?.cancel();
-    _notificationSubscription = null;
-    _isListening = false;
-    debugPrint('🛑 NOTIFICATION: Listener stopped');
+    try {
+      await _notificationSubscription?.cancel();
+      _notificationSubscription = null;
+      // Remove method handler (optional)
+      _nativeChannel.setMethodCallHandler(null);
+      _isListening = false;
+      debugPrint('🛑 NOTIFICATION: Listener stopped');
+    } catch (e) {
+      debugPrint('❌ NOTIFICATION: Error stopping listener: $e');
+    }
   }
 
   /// Returns { 'transactionMap': Map, 'hash': String } when inserted, else null
@@ -156,19 +213,43 @@ class NotificationService {
     dynamic event,
   ) async {
     try {
-      final packageName = event.packageName?.toString() ?? '';
-      final title = event.title?.toString() ?? '';
-      final content = event.content?.toString() ?? '';
+      // Support both plugin event objects and plain Maps from MethodChannel
+      String packageName = '';
+      String title = '';
+      String content = '';
       final timestamp = DateTime.now();
+
+      if (event is Map) {
+        packageName =
+            (event['package'] ?? event['packageName'] ?? event['pkg'])
+                ?.toString() ??
+            '';
+        title = (event['title'] ?? event['t'] ?? '')?.toString() ?? '';
+        content =
+            (event['content'] ?? event['text'] ?? event['body'] ?? '')
+                ?.toString() ??
+            '';
+      } else {
+        try {
+          final pn = event.packageName;
+          final tt = event.title;
+          final cc = event.content ?? event.text ?? event.bigText;
+          packageName = pn?.toString() ?? '';
+          title = tt?.toString() ?? '';
+          content = cc?.toString() ?? '';
+        } catch (_) {
+          final s = event?.toString() ?? '';
+          content = s;
+        }
+      }
 
       debugPrint('📬 NOTIFICATION: $packageName | $title | $content');
 
-      // Quick filter
       final isFinancial = _isFromFinancialApp(packageName);
       debugPrint('   💰 Is financial: $isFinancial');
       if (!isFinancial) return null;
 
-      final fullText = '$title $content';
+      final fullText = '$title $content'.trim();
       final txnData = _parseTransaction(fullText, packageName);
       if (txnData == null) {
         debugPrint('   ⏭️ No transaction parsed');
@@ -205,17 +286,18 @@ class NotificationService {
         return {'transactionMap': transactionMap, 'hash': hash};
       } else {
         debugPrint(
-          '⚠️ NOTIFICATION: Insert returned id=$id (possibly duplicate)',
+          '⚠️ NOTIFICATION: Insert returned id=$id (possibly duplicate or error)',
         );
         return null;
       }
-    } catch (e) {
-      debugPrint('❌ NOTIFICATION: Exception: $e');
+    } catch (e, st) {
+      debugPrint('❌ NOTIFICATION: Exception: $e\n$st');
       return null;
     }
   }
 
   static bool _isFromFinancialApp(String packageName) {
+    if (packageName.isEmpty) return true;
     if (_financialApps.contains(packageName)) return true;
     final bankPatterns = [
       'bank',
@@ -229,7 +311,9 @@ class NotificationService {
       'message',
     ];
     final lower = packageName.toLowerCase();
-    for (final p in bankPatterns) if (lower.contains(p)) return true;
+    for (final p in bankPatterns) {
+      if (lower.contains(p)) return true;
+    }
     return false;
   }
 

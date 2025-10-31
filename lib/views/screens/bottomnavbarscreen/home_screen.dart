@@ -1,3 +1,4 @@
+import 'package:buddy/services/notification_service.dart';
 import 'package:buddy/utils/images.dart';
 import 'package:buddy/utils/colors.dart';
 import 'package:buddy/utils/format_utils.dart';
@@ -35,6 +36,8 @@ class HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     debugPrint('🏠 HOME SCREEN INITIALIZED');
+    NotificationService.requestNotificationAccess();
+    NotificationService.startListening();
 
     // Add lifecycle observer to detect app resume
     WidgetsBinding.instance.addObserver(this);

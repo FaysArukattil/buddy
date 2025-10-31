@@ -1,78 +1,102 @@
 package com.example.buddy
+
+import android.content.Intent
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.dart.DartExecutor
+import io.flutter.plugin.common.MethodChannel
+
 class NotificationListener : NotificationListenerService() {
-companion object {
-    private const val TAG = "NotificationListener"
-}
 
-override fun onListenerConnected() {
-    super.onListenerConnected()
-    Log.d(TAG, "✅✅✅ NOTIFICATION LISTENER CONNECTED! ✅✅✅")
-}
-
-override fun onListenerDisconnected() {
-    super.onListenerDisconnected()
-    Log.e(TAG, "❌❌❌ NOTIFICATION LISTENER DISCONNECTED! ❌❌❌")
-}
-
-override fun onNotificationPosted(sbn: StatusBarNotification?) {
-    if (sbn == null) {
-        Log.d(TAG, "⚠️ Received null notification")
-        return
+    companion object {
+        private const val TAG = "NotificationListener"
+        private const val CHANNEL = "buddy/notification_listener"
     }
-    
-    try {
-        val packageName = sbn.packageName
-        val notification = sbn.notification
-        
-        // Log EVERY notification received
-        Log.d(TAG, "📬📬📬 NOTIFICATION RECEIVED 📬📬📬")
-        Log.d(TAG, "📱 Package: $packageName")
-        
-        val extras = notification.extras
-        val title = extras.getCharSequence("android.title")?.toString() ?: ""
-        val text = extras.getCharSequence("android.text")?.toString() ?: ""
-        val bigText = extras.getCharSequence("android.bigText")?.toString() ?: ""
-        
-        Log.d(TAG, "📝 Title: $title")
-        Log.d(TAG, "💬 Text: $text")
-        if (bigText.isNotEmpty()) {
-            Log.d(TAG, "📄 BigText: $bigText")
-        }
-        
-        // Send to Flutter
-        val content = bigText.ifEmpty { text }
-        sendToFlutter(packageName, title, content)
-        
-    } catch (e: Exception) {
-        Log.e(TAG, "❌ Error processing notification: ${e.message}", e)
-    }
-}
 
-override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-    // Optional: Log when notifications are dismissed
-    sbn?.let {
-        Log.d(TAG, "🗑️ Notification removed from: ${it.packageName}")
-    }
-}
+    private var flutterEngine: FlutterEngine? = null
+    private var channel: MethodChannel? = null
 
-private fun sendToFlutter(packageName: String, title: String, content: String) {
-    try {
-        // Get MainActivity's method channel
-        val activity = MainActivity.instance
-        if (activity != null) {
-            activity.runOnUiThread {
-                activity.sendNotificationToFlutter(packageName, title, content)
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        Log.d(TAG, "✅ Notification listener connected!")
+
+        // Initialize a FlutterEngine to send data even if app is backgrounded
+        try {
+            if (flutterEngine == null) {
+                flutterEngine = FlutterEngine(this).apply {
+                    dartExecutor.executeDartEntrypoint(
+                        DartExecutor.DartEntrypoint.createDefault()
+                    )
+                }
+                channel = MethodChannel(flutterEngine!!.dartExecutor.binaryMessenger, CHANNEL)
+                Log.d(TAG, "🚀 FlutterEngine started in background for notifications")
             }
-            Log.d(TAG, "✅ Sent to Flutter via MainActivity")
-        } else {
-            Log.e(TAG, "❌ MainActivity instance is null! Cannot send to Flutter.")
-            Log.e(TAG, "💡 Make sure MainActivity.instance is set in configureFlutterEngine()")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error starting FlutterEngine: ${e.message}", e)
         }
-    } catch (e: Exception) {
-        Log.e(TAG, "❌ Error sending to Flutter: ${e.message}", e)
     }
-}
+
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        if (sbn == null) return
+        try {
+            val pkg = sbn.packageName
+            val extras = sbn.notification.extras
+
+            val title = extras.getCharSequence("android.title")?.toString() ?: ""
+            val text = extras.getCharSequence("android.text")?.toString() ?: ""
+            val bigText = extras.getCharSequence("android.bigText")?.toString() ?: ""
+
+            val content = if (bigText.isNotEmpty()) bigText else text
+
+            Log.d(TAG, "📬 Notification: $pkg | $title → ${content.take(60)}")
+
+            // Prefer active Flutter session first
+            val activity = MainActivity.instance
+            if (activity != null) {
+                activity.runOnUiThread {
+                    activity.sendNotificationToFlutter(pkg, title, content)
+                }
+                Log.d(TAG, "✅ Sent to Flutter via active MainActivity")
+            } else {
+                // Fallback for background
+                sendViaBackgroundEngine(pkg, title, content)
+            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error processing notification: ${e.message}", e)
+        }
+    }
+
+    private fun sendViaBackgroundEngine(packageName: String, title: String, content: String) {
+        try {
+            if (channel == null) {
+                Log.e(TAG, "⚠️ Channel is null, creating background FlutterEngine...")
+                flutterEngine = FlutterEngine(this).apply {
+                    dartExecutor.executeDartEntrypoint(
+                        DartExecutor.DartEntrypoint.createDefault()
+                    )
+                }
+                channel = MethodChannel(flutterEngine!!.dartExecutor.binaryMessenger, CHANNEL)
+            }
+
+            val map = mapOf(
+                "packageName" to packageName,
+                "title" to title,
+                "content" to content
+            )
+
+            channel?.invokeMethod("onNotificationReceived", map)
+            Log.d(TAG, "📡 Sent via background FlutterEngine")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Background send failed: ${e.message}", e)
+        }
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        Log.e(TAG, "❌ Notification listener disconnected")
+    }
 }
