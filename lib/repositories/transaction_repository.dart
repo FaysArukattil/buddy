@@ -1,4 +1,6 @@
+// lib/repositories/transaction_repository.dart
 import 'package:buddy/services/db_helper.dart';
+import 'package:buddy/models/transaction.dart';
 
 class TransactionRepository {
   final DatabaseHelper dbh = DatabaseHelper.instance;
@@ -45,5 +47,21 @@ class TransactionRepository {
 
   Future<bool> isDuplicateTransaction(String hash) async {
     return dbh.isDuplicateTransaction(hash);
+  }
+
+  Future<int> addAutoDetected(
+    TransactionModel tx, {
+    required String notificationSource,
+    required String notificationHash,
+  }) async {
+    // Prevent duplicates at repo layer too
+    if (await dbh.isDuplicateTransaction(notificationHash)) return 0;
+
+    final map = tx.toMap();
+    map['notification_source'] = notificationSource;
+    map['notification_hash'] = notificationHash;
+    map['auto_detected'] = 1;
+
+    return dbh.insertAutoTransaction(map);
   }
 }

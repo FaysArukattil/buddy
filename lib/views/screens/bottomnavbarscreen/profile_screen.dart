@@ -38,6 +38,363 @@ class ProfileScreenState extends State<ProfileScreen>
   bool _autoDetectionEnabled = true;
   int _autoTransactionCount = 0;
 
+  Widget _buildNotificationDebugSection() {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: NotificationService.getDebugInfo(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final info = snapshot.data!;
+        final isGranted = info['permission_granted'] as bool;
+        final isListening = info['is_listening'] as bool;
+        final isEnabled = info['auto_detection_enabled'] as bool;
+        final appCount = info['monitored_apps_count'] as int;
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.deepPurple.withValues(alpha: 0.1),
+                Colors.blue.withValues(alpha: 0.05),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: Colors.deepPurple.withValues(alpha: 0.3),
+              width: 2,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.bug_report_rounded,
+                    color: Colors.deepPurple,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    '🔍 Debug Info',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.deepPurple,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.refresh, size: 20),
+                    onPressed: () => setState(() {}),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+              const Divider(height: 20),
+
+              // Status indicators
+              _buildDebugRow(
+                'Permission',
+                isGranted ? 'Granted ✅' : 'NOT Granted ❌',
+                isGranted ? Colors.green : Colors.red,
+              ),
+              _buildDebugRow(
+                'Listener',
+                isListening ? 'Active ✅' : 'Inactive ⚠️',
+                isListening ? Colors.green : Colors.orange,
+              ),
+              _buildDebugRow(
+                'Auto-Detection',
+                isEnabled ? 'Enabled ✅' : 'Disabled ❌',
+                isEnabled ? Colors.green : Colors.grey,
+              ),
+              _buildDebugRow('Monitoring', '$appCount apps', Colors.blue),
+
+              const SizedBox(height: 12),
+              const Divider(height: 20),
+
+              // Test buttons
+              Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _runParserTests(),
+                      icon: const Icon(Icons.science, size: 18),
+                      label: const Text('🧪 Test Parser'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepPurple,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _showDetailedDebugInfo(info),
+                      icon: const Icon(Icons.info_outline, size: 18),
+                      label: const Text('View Monitored Apps'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.deepPurple,
+                        side: const BorderSide(color: Colors.deepPurple),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+
+              // Instructions based on status
+              if (!isGranted) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.orange.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.warning_rounded,
+                            color: Colors.orange.shade700,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Action Required',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange.shade900,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '1. Tap "Notification Permission" above\n'
+                        '2. Find your app in the list\n'
+                        '3. Enable the toggle\n'
+                        '4. Return here and tap refresh button',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              if (isGranted && !isListening) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.orange.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: Colors.orange.shade700,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Listener not active. Close and restart the app.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              if (isGranted && isListening) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.green.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.check_circle_outline,
+                        color: Colors.green.shade700,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '✅ Everything working! Send test SMS: "Rs 100 debited from account"',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDebugRow(String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade700,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withValues(alpha: 0.3)),
+            ),
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _runParserTests() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Running tests...\nCheck console'),
+          ],
+        ),
+      ),
+    );
+
+    final testMessages = [
+      'Rs 500 debited from your account for Swiggy',
+      'Credited Rs 1000 to your account',
+      'Paid Rs 250 via PhonePe',
+      'INR 1500.50 credited to A/c XX1234',
+      'Debited Rs.299 for Netflix',
+    ];
+
+    debugPrint('\n========== PARSER TESTS ==========');
+    for (final msg in testMessages) {
+      await NotificationService.testNotificationParsing(msg);
+    }
+    debugPrint('========== TESTS COMPLETE ==========\n');
+
+    if (!mounted) return;
+    Navigator.pop(context);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('✅ Tests done! Check console/logcat'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  void _showDetailedDebugInfo(Map<String, dynamic> info) {
+    final apps = info['monitored_apps'] as List;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Monitored Apps'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Listening to ${apps.length} apps:',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: apps.length,
+                  itemBuilder: (context, index) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Text(
+                        '${index + 1}. ${apps[index]}',
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -814,7 +1171,9 @@ class ProfileScreenState extends State<ProfileScreen>
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
                                 border: Border.all(
-                                  color: AppColors.primary.withValues(alpha: 0.3),
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.3,
+                                  ),
                                   width: 1.5,
                                 ),
                                 borderRadius: BorderRadius.circular(14),
@@ -824,7 +1183,9 @@ class ProfileScreenState extends State<ProfileScreen>
                                   Container(
                                     padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
-                                      color: AppColors.primary.withValues(alpha: 0.12),
+                                      color: AppColors.primary.withValues(
+                                        alpha: 0.12,
+                                      ),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     child: Icon(
@@ -836,7 +1197,8 @@ class ProfileScreenState extends State<ProfileScreen>
                                   const SizedBox(width: 14),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         const Text(
                                           'Auto-Detect Transactions',
@@ -860,21 +1222,29 @@ class ProfileScreenState extends State<ProfileScreen>
                                   Switch(
                                     value: _autoDetectionEnabled,
                                     onChanged: (value) async {
-                                      await NotificationService.setAutoDetectionEnabled(value);
-                                      setState(() => _autoDetectionEnabled = value);
-                                      
+                                      await NotificationService.setAutoDetectionEnabled(
+                                        value,
+                                      );
+                                      setState(
+                                        () => _autoDetectionEnabled = value,
+                                      );
+
                                       if (!mounted) return;
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         SnackBar(
                                           content: Text(
-                                            value 
-                                              ? 'Auto-detection enabled' 
-                                              : 'Auto-detection disabled',
+                                            value
+                                                ? 'Auto-detection enabled'
+                                                : 'Auto-detection disabled',
                                           ),
                                           backgroundColor: AppColors.primary,
                                           behavior: SnackBarBehavior.floating,
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(12),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
                                           ),
                                           duration: const Duration(seconds: 2),
                                         ),
@@ -916,7 +1286,9 @@ class ProfileScreenState extends State<ProfileScreen>
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
                                   border: Border.all(
-                                    color: AppColors.secondary.withValues(alpha: 0.3),
+                                    color: AppColors.secondary.withValues(
+                                      alpha: 0.3,
+                                    ),
                                     width: 1.5,
                                   ),
                                   borderRadius: BorderRadius.circular(14),
@@ -926,7 +1298,9 @@ class ProfileScreenState extends State<ProfileScreen>
                                     Container(
                                       padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
-                                        color: AppColors.secondary.withValues(alpha: 0.12),
+                                        color: AppColors.secondary.withValues(
+                                          alpha: 0.12,
+                                        ),
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: Icon(
@@ -938,7 +1312,8 @@ class ProfileScreenState extends State<ProfileScreen>
                                     const SizedBox(width: 14),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           const Text(
                                             'Notification Permission',
@@ -992,7 +1367,9 @@ class ProfileScreenState extends State<ProfileScreen>
                                 Container(
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: AppColors.income.withValues(alpha: 0.2),
+                                    color: AppColors.income.withValues(
+                                      alpha: 0.2,
+                                    ),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Icon(
@@ -1004,7 +1381,8 @@ class ProfileScreenState extends State<ProfileScreen>
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       const Text(
                                         'Auto-Detected Transactions',
@@ -1028,6 +1406,13 @@ class ProfileScreenState extends State<ProfileScreen>
                               ],
                             ),
                           ),
+
+                          const SizedBox(height: 16),
+
+                          // DEBUG SECTION
+                          _buildNotificationDebugSection(),
+
+                          const SizedBox(height: 30),
                         ],
                       ),
                     ),

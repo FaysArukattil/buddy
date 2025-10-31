@@ -1,3 +1,4 @@
+// lib/services/notification_service.dart
 import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
@@ -10,7 +11,7 @@ class NotificationService {
   static StreamSubscription? _notificationSubscription;
   static bool _isListening = false;
 
-  // Regex patterns for transaction detection
+  // Regex patterns
   static final RegExp _debitRegex = RegExp(
     r'\b(debited|spent|purchase|paid|withdrawn|debit|payment|sent|transferred)\b',
     caseSensitive: false,
@@ -21,74 +22,58 @@ class NotificationService {
     caseSensitive: false,
   );
 
-  // Enhanced amount regex to handle various Indian banking formats
   static final RegExp _amountRegex = RegExp(
     r'(?:Rs\.?\s?|INR\s?|₹\s?)([0-9,]+\.?[0-9]*)|([0-9,]+\.?[0-9]*)\s?(?:Rs\.?|INR|₹)|(?:amount|amt|sum)[\s:]*(?:Rs\.?\s?|INR\s?|₹\s?)?([0-9,]+\.?[0-9]*)',
     caseSensitive: false,
   );
 
-  // Expanded list of financial and SMS apps
   static final List<String> _financialApps = [
-    // SMS Apps
-    'com.google.android.apps.messaging', // Google Messages
-    'com.android.messaging', // Default SMS
-    'com.samsung.android.messaging', // Samsung Messages
-    'com.android.mms', // Default MMS
-    'com.textra', // Textra SMS
-    
-    // UPI & Payment Apps
-    'com.phonepe.app', // PhonePe
-    'com.google.android.apps.nbu.paisa.user', // Google Pay
-    'in.org.npci.upiapp', // BHIM UPI
-    'net.one97.paytm', // Paytm
-    'com.amazon.mShop.android.shopping', // Amazon Pay
-    'in.amazon.mShop.android.shopping', // Amazon India
-    'com.mobikwik_new', // MobiKwik
-    'com.freecharge.android', // FreeCharge
-    
-    // Banking Apps
-    'com.sbi.SBIFreedomPlus', // SBI
-    'com.icicibank.mobile.iciciappathon', // ICICI
-    'com.hdfcbank.payzapp', // HDFC
-    'com.axisbank.mobile', // Axis Bank
-    'com.kotakbank.mobile', // Kotak Bank
-    'com.indusind.mobile', // IndusInd Bank
-    
-    // Other Apps
-    'com.whatsapp', // WhatsApp (for payment messages)
-    'com.truecaller', // Truecaller (SMS)
+    'com.google.android.apps.messaging',
+    'com.android.messaging',
+    'com.samsung.android.messaging',
+    'com.android.mms',
+    'com.textra',
+    'com.phonepe.app',
+    'com.google.android.apps.nbu.paisa.user',
+    'in.org.npci.upiapp',
+    'net.one97.paytm',
+    'com.amazon.mShop.android.shopping',
+    'in.amazon.mShop.android.shopping',
+    'com.mobikwik_new',
+    'com.freecharge.android',
+    'com.sbi.SBIFreedomPlus',
+    'com.icicibank.mobile.iciciappathon',
+    'com.hdfcbank.payzapp',
+    'com.axisbank.mobile',
+    'com.kotakbank.mobile',
+    'com.indusind.mobile',
+    'com.whatsapp',
+    'com.truecaller',
   ];
 
   /// Request notification listener permission
   static Future<bool> requestNotificationAccess() async {
     debugPrint('🔔 NOTIFICATION: Requesting notification access...');
-    
-    // Check if permission is already granted
     final isGranted = await NotificationListenerService.isPermissionGranted();
-    
     if (isGranted) {
       debugPrint('✅ NOTIFICATION: Permission already granted');
       return true;
     }
-
-    // Open settings to grant permission
     debugPrint('⚠️ NOTIFICATION: Opening settings to grant permission');
     await NotificationListenerService.requestPermission();
-    
     return false;
   }
 
-  /// Check if auto-detection is enabled in settings
+  /// Check if auto-detection is enabled
   static Future<bool> isAutoDetectionEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('auto_detect_transactions') ?? true; // Default enabled
+    return prefs.getBool('auto_detect_transactions') ?? true;
   }
 
-  /// Enable or disable auto-detection
+  /// Enable / disable auto-detection
   static Future<void> setAutoDetectionEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('auto_detect_transactions', enabled);
-    
     if (enabled && !_isListening) {
       await startListening();
     } else if (!enabled && _isListening) {
@@ -96,8 +81,11 @@ class NotificationService {
     }
   }
 
-  /// Start listening to notifications
-  static Future<void> startListening() async {
+  /// Start listening - accepts optional callback:
+  /// onTransactionDetected(Map<String,Object?> transactionMap, String hash)
+  static Future<void> startListening([
+    Future<void> Function(Map<String, Object?>, String)? onTransactionDetected,
+  ]) async {
     if (_isListening) {
       debugPrint('⚠️ NOTIFICATION: Already listening');
       return;
@@ -105,141 +93,130 @@ class NotificationService {
 
     final isEnabled = await isAutoDetectionEnabled();
     if (!isEnabled) {
-      debugPrint('⚠️ NOTIFICATION: Auto-detection is disabled');
+      debugPrint('⚠️ NOTIFICATION: Auto-detection disabled');
       return;
     }
 
     final isGranted = await NotificationListenerService.isPermissionGranted();
     debugPrint('🔍 NOTIFICATION: Permission status: $isGranted');
-    
     if (!isGranted) {
-      debugPrint('❌ NOTIFICATION: Permission not granted - Please enable in Settings → Notification Access');
+      debugPrint(
+        '❌ NOTIFICATION: Permission not granted - enable in Settings → Notification Access',
+      );
       return;
     }
 
     debugPrint('🎧 NOTIFICATION: Starting notification listener...');
-    debugPrint('📱 NOTIFICATION: Monitoring ${_financialApps.length} financial apps');
-    
     try {
-      _notificationSubscription = NotificationListenerService.notificationsStream.listen(
-        (event) async {
-          await _handleNotification(event);
-        },
-        onError: (error) {
-          debugPrint('❌ NOTIFICATION: Error in stream: $error');
-        },
-        onDone: () {
-          debugPrint('⚠️ NOTIFICATION: Stream closed');
-          _isListening = false;
-        },
-      );
+      _notificationSubscription = NotificationListenerService
+          .notificationsStream
+          .listen(
+            (event) async {
+              try {
+                final result = await _handleNotification(event);
+                // result is { 'transactionMap':..., 'hash': '...' }
+                if (result != null && onTransactionDetected != null) {
+                  final transactionMap =
+                      result['transactionMap'] as Map<String, Object?>;
+                  final hash = result['hash'] as String;
+                  await onTransactionDetected(transactionMap, hash);
+                }
+              } catch (e) {
+                debugPrint('❌ NOTIFICATION: Error processing event: $e');
+              }
+            },
+            onError: (error) {
+              debugPrint('❌ NOTIFICATION: Stream error: $error');
+            },
+            onDone: () {
+              debugPrint('⚠️ NOTIFICATION: Stream closed');
+              _isListening = false;
+            },
+          );
 
       _isListening = true;
-      debugPrint('✅ NOTIFICATION: Listener started successfully');
-      debugPrint('🔍 NOTIFICATION: Waiting for notifications...');
+      debugPrint('✅ NOTIFICATION: Listener started');
     } catch (e) {
       debugPrint('❌ NOTIFICATION: Failed to start listener: $e');
       _isListening = false;
     }
   }
 
-  /// Stop listening to notifications
+  /// Stop listening
   static Future<void> stopListening() async {
-    if (!_isListening) {
-      return;
-    }
-
+    if (!_isListening) return;
     await _notificationSubscription?.cancel();
     _notificationSubscription = null;
     _isListening = false;
     debugPrint('🛑 NOTIFICATION: Listener stopped');
   }
 
-  /// Handle incoming notification
-  static Future<void> _handleNotification(dynamic event) async {
+  /// Returns { 'transactionMap': Map, 'hash': String } when inserted, else null
+  static Future<Map<String, Object?>?> _handleNotification(
+    dynamic event,
+  ) async {
     try {
       final packageName = event.packageName?.toString() ?? '';
       final title = event.title?.toString() ?? '';
       final content = event.content?.toString() ?? '';
       final timestamp = DateTime.now();
 
-      debugPrint('\n📬 NOTIFICATION RECEIVED:');
-      debugPrint('   📱 Package: $packageName');
-      debugPrint('   📝 Title: $title');
-      debugPrint('   💬 Content: $content');
-      debugPrint('   ⏰ Time: ${timestamp.toString()}');
+      debugPrint('📬 NOTIFICATION: $packageName | $title | $content');
 
-      // Check if notification is from a financial app
+      // Quick filter
       final isFinancial = _isFromFinancialApp(packageName);
-      debugPrint('   💰 Is Financial: $isFinancial');
-      
-      if (!isFinancial) {
-        debugPrint('   ⏭️ SKIPPING: Not from financial app');
-        return;
-      }
-      
-      debugPrint('   ✅ PROCESSING: Financial app detected');
+      debugPrint('   💰 Is financial: $isFinancial');
+      if (!isFinancial) return null;
 
-      // Combine title and content for parsing
       final fullText = '$title $content';
+      final txnData = _parseTransaction(fullText, packageName);
+      if (txnData == null) {
+        debugPrint('   ⏭️ No transaction parsed');
+        return null;
+      }
 
-      // Parse transaction details
-      final transactionData = _parseTransaction(fullText, packageName);
+      final hash = _generateHash(fullText, timestamp);
+      final isDuplicate = await DatabaseHelper.instance.isDuplicateTransaction(
+        hash,
+      );
+      if (isDuplicate) {
+        debugPrint('   ⚠️ Duplicate detected (hash) - skipping');
+        return null;
+      }
 
-      if (transactionData != null) {
-        // Generate unique hash to prevent duplicates
-        final hash = _generateHash(fullText, timestamp);
+      final transactionMap = <String, Object?>{
+        'amount': txnData['amount'],
+        'type': txnData['type'],
+        'date': timestamp.toIso8601String(),
+        'note': txnData['note'],
+        'category': txnData['category'],
+        'icon': txnData['icon'],
+        'auto_detected': 1,
+        'notification_source': packageName,
+        'notification_hash': hash,
+      };
 
-        // Check for duplicates
-        final isDuplicate = await DatabaseHelper.instance.isDuplicateTransaction(hash);
-        if (isDuplicate) {
-          debugPrint('⚠️ NOTIFICATION: Duplicate transaction detected, skipping');
-          return;
-        }
-
-        // Insert transaction into database
-        final transactionMap = {
-          'amount': transactionData['amount'],
-          'type': transactionData['type'],
-          'date': timestamp.toIso8601String(),
-          'note': transactionData['note'],
-          'category': transactionData['category'],
-          'icon': transactionData['icon'],
-          'auto_detected': 1,
-          'notification_source': packageName,
-          'notification_hash': hash,
-        };
-
-        final id = await DatabaseHelper.instance.insertAutoTransaction(transactionMap);
-
-        if (id > 0) {
-          debugPrint('✅ NOTIFICATION: Auto-transaction added successfully!');
-          debugPrint('   Type: ${transactionData['type']}');
-          debugPrint('   Amount: ₹${transactionData['amount']}');
-          debugPrint('   Category: ${transactionData['category']}');
-          
-          // Show local notification feedback (optional - can be implemented later)
-          _showTransactionAddedFeedback(transactionData);
-        }
+      final id = await DatabaseHelper.instance.insertAutoTransaction(
+        transactionMap,
+      );
+      if (id > 0) {
+        debugPrint('✅ NOTIFICATION: Auto-transaction inserted (id=$id)');
+        _showTransactionAddedFeedback(txnData);
+        return {'transactionMap': transactionMap, 'hash': hash};
       } else {
-        debugPrint('⏭️ NOTIFICATION: No transaction detected in message');
+        debugPrint(
+          '⚠️ NOTIFICATION: Insert returned id=$id (possibly duplicate)',
+        );
+        return null;
       }
     } catch (e) {
-      debugPrint('❌ NOTIFICATION: Error handling notification: $e');
+      debugPrint('❌ NOTIFICATION: Exception: $e');
+      return null;
     }
   }
 
-  /// Check if notification is from a financial app
   static bool _isFromFinancialApp(String packageName) {
-    debugPrint('   🔍 Checking package: $packageName');
-    
-    // Check against known financial apps
-    if (_financialApps.contains(packageName)) {
-      debugPrint('   ✅ Found in whitelist');
-      return true;
-    }
-
-    // Check for common bank app patterns
+    if (_financialApps.contains(packageName)) return true;
     final bankPatterns = [
       'bank',
       'upi',
@@ -251,132 +228,99 @@ class NotificationService {
       'messaging',
       'message',
     ];
-
-    for (final pattern in bankPatterns) {
-      if (packageName.toLowerCase().contains(pattern)) {
-        debugPrint('   ✅ Matches pattern: $pattern');
-        return true;
-      }
-    }
-    
-    debugPrint('   ❌ Not a financial app');
+    final lower = packageName.toLowerCase();
+    for (final p in bankPatterns) if (lower.contains(p)) return true;
     return false;
   }
 
-  /// Parse transaction from notification text
   static Map<String, dynamic>? _parseTransaction(String text, String source) {
-    // Check if it's a debit or credit
     final isDebit = _debitRegex.hasMatch(text);
     final isCredit = _creditRegex.hasMatch(text);
+    if (!isDebit && !isCredit) return null;
 
-    if (!isDebit && !isCredit) {
-      return null; // Not a transaction notification
-    }
-
-    // Extract amount
     final amountMatch = _amountRegex.firstMatch(text);
-    if (amountMatch == null) {
-      return null; // No amount found
-    }
+    if (amountMatch == null) return null;
 
-    // Get amount value (check all capture groups)
-    final amountStr = (amountMatch.group(1) ?? amountMatch.group(2) ?? amountMatch.group(3) ?? '')
-        .replaceAll(',', '')
-        .trim();
-    
-    debugPrint('   💰 Found amount: $amountStr');
-    
+    final amountStr =
+        (amountMatch.group(1) ??
+                amountMatch.group(2) ??
+                amountMatch.group(3) ??
+                '')
+            .replaceAll(',', '')
+            .trim();
     final amount = double.tryParse(amountStr);
-    if (amount == null || amount <= 0) {
-      return null; // Invalid amount
-    }
+    if (amount == null || amount <= 0) return null;
 
-    // Determine transaction type
     final type = isDebit ? 'expense' : 'income';
-
-    // Determine category based on keywords
     final category = _detectCategory(text, type);
-
-    // Get icon for category
     final icon = _getIconForCategory(category);
 
     return {
       'amount': amount,
       'type': type,
-      'note': 'Auto-detected from notification: ${text.length > 100 ? '${text.substring(0, 100)}...' : text}',
+      'note':
+          'Auto-detected from notification: ${text.length > 100 ? '${text.substring(0, 100)}...' : text}',
       'category': category,
       'icon': icon,
     };
   }
 
-  /// Detect category from transaction text
   static String _detectCategory(String text, String type) {
     final lowerText = text.toLowerCase();
-
     if (type == 'expense') {
-      // Expense categories
-      if (lowerText.contains('food') || lowerText.contains('restaurant') || 
-          lowerText.contains('swiggy') || lowerText.contains('zomato')) {
+      if (lowerText.contains('food') ||
+          lowerText.contains('swiggy') ||
+          lowerText.contains('zomato'))
         return 'Food';
-      } else if (lowerText.contains('shopping') || lowerText.contains('amazon') || 
-                 lowerText.contains('flipkart') || lowerText.contains('myntra')) {
+      if (lowerText.contains('amazon') || lowerText.contains('flipkart'))
         return 'Shopping';
-      } else if (lowerText.contains('transport') || lowerText.contains('uber') || 
-                 lowerText.contains('ola') || lowerText.contains('fuel') || 
-                 lowerText.contains('petrol')) {
+      if (lowerText.contains('uber') ||
+          lowerText.contains('ola') ||
+          lowerText.contains('fuel'))
         return 'Transport';
-      } else if (lowerText.contains('bill') || lowerText.contains('electricity') || 
-                 lowerText.contains('water') || lowerText.contains('gas')) {
+      if (lowerText.contains('bill') ||
+          lowerText.contains('electricity') ||
+          lowerText.contains('water'))
         return 'Bills';
-      } else if (lowerText.contains('entertainment') || lowerText.contains('movie') || 
-                 lowerText.contains('netflix') || lowerText.contains('spotify')) {
+      if (lowerText.contains('movie') || lowerText.contains('netflix'))
         return 'Entertainment';
-      } else if (lowerText.contains('health') || lowerText.contains('medical') || 
-                 lowerText.contains('pharmacy') || lowerText.contains('hospital')) {
+      if (lowerText.contains('pharmacy') || lowerText.contains('hospital'))
         return 'Health';
-      }
       return 'Other';
     } else {
-      // Income categories
-      if (lowerText.contains('salary') || lowerText.contains('wage')) {
-        return 'Salary';
-      } else if (lowerText.contains('refund') || lowerText.contains('cashback')) {
+      if (lowerText.contains('salary')) return 'Salary';
+      if (lowerText.contains('refund') || lowerText.contains('cashback'))
         return 'Refund';
-      } else if (lowerText.contains('interest')) {
-        return 'Interest';
-      }
+      if (lowerText.contains('interest')) return 'Interest';
       return 'Other';
     }
   }
 
-  /// Get Material icon code point for category
   static int _getIconForCategory(String category) {
-    // Material Icons code points
     switch (category) {
       case 'Food':
-        return 0xe56c; // restaurant
+        return 0xe56c;
       case 'Shopping':
-        return 0xe8cc; // shopping_bag
+        return 0xe8cc;
       case 'Transport':
-        return 0xe531; // directions_car
+        return 0xe531;
       case 'Bills':
-        return 0xe8b0; // receipt
+        return 0xe8b0;
       case 'Entertainment':
-        return 0xe404; // movie
+        return 0xe404;
       case 'Health':
-        return 0xe3f3; // local_hospital
+        return 0xe3f3;
       case 'Salary':
-        return 0xe263; // account_balance_wallet
+        return 0xe263;
       case 'Refund':
-        return 0xe5d5; // replay
+        return 0xe5d5;
       case 'Interest':
-        return 0xe227; // trending_up
+        return 0xe227;
       default:
-        return 0xe8f4; // category (default)
+        return 0xe8f4;
     }
   }
 
-  /// Generate unique hash for notification
   static String _generateHash(String text, DateTime timestamp) {
     final combined = '$text${timestamp.millisecondsSinceEpoch}';
     final bytes = utf8.encode(combined);
@@ -384,59 +328,29 @@ class NotificationService {
     return digest.toString();
   }
 
-  /// Show feedback when transaction is added (placeholder for future implementation)
   static void _showTransactionAddedFeedback(Map<String, dynamic> data) {
-    // This can be implemented with local notifications or in-app notifications
-    // For now, just log it
-    debugPrint('💬 FEEDBACK: Transaction added - ${data['type']} ₹${data['amount']}');
+    debugPrint(
+      '💬 FEEDBACK: Transaction added - ${data['type']} ₹${data['amount']}',
+    );
   }
 
-  /// Get statistics about auto-detected transactions
-  static Future<Map<String, dynamic>> getAutoDetectionStats() async {
-    final transactions = await DatabaseHelper.instance.getAutoDetectedTransactions();
-    
-    double totalExpense = 0;
-    double totalIncome = 0;
-    
-    for (final txn in transactions) {
-      final amount = (txn['amount'] as num).toDouble();
-      if (txn['type'] == 'expense') {
-        totalExpense += amount;
-      } else {
-        totalIncome += amount;
-      }
-    }
-
-    return {
-      'total_count': transactions.length,
-      'total_expense': totalExpense,
-      'total_income': totalIncome,
-    };
-  }
-
-  /// Test notification parsing manually (for debugging)
+  /// Optional debug helper - test parsing locally
   static Future<void> testNotificationParsing(String testMessage) async {
-    debugPrint('\n🧪 TESTING NOTIFICATION PARSING:');
-    debugPrint('   📝 Test Message: $testMessage');
-    
+    debugPrint('🧪 TEST PARSING: $testMessage');
     final result = _parseTransaction(testMessage, 'com.test.app');
-    
     if (result != null) {
-      debugPrint('   ✅ PARSED SUCCESSFULLY:');
-      debugPrint('      💰 Amount: ₹${result['amount']}');
-      debugPrint('      📊 Type: ${result['type']}');
-      debugPrint('      🏷️ Category: ${result['category']}');
-      debugPrint('      📝 Note: ${result['note']}');
+      debugPrint(
+        '   ✅ Parsed: amount=${result['amount']} type=${result['type']}',
+      );
     } else {
-      debugPrint('   ❌ PARSING FAILED: No transaction detected');
+      debugPrint('   ❌ Not parsed');
     }
   }
 
-  /// Get current listening status and debug info
+  /// Get debug info
   static Future<Map<String, dynamic>> getDebugInfo() async {
     final isGranted = await NotificationListenerService.isPermissionGranted();
     final isEnabled = await isAutoDetectionEnabled();
-    
     return {
       'is_listening': _isListening,
       'permission_granted': isGranted,

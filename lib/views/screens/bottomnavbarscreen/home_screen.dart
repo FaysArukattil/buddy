@@ -16,8 +16,10 @@ class HomeScreen extends StatefulWidget {
 }
 
 class HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
-  
+    with
+        SingleTickerProviderStateMixin,
+        AutomaticKeepAliveClientMixin,
+        WidgetsBindingObserver {
   String _displayName = '';
   double _totalBalance = 0;
   double _income = 0;
@@ -28,14 +30,15 @@ class HomeScreenState extends State<HomeScreen>
   final List<Map<String, dynamic>> _transactions = [];
   late final TransactionRepository _repo;
   bool _isLoading = true;
-  
-  // Track if we need to refresh
-  bool _needsRefresh = true;
 
   @override
   void initState() {
     super.initState();
     debugPrint('🏠 HOME SCREEN INITIALIZED');
+
+    // Add lifecycle observer to detect app resume
+    WidgetsBinding.instance.addObserver(this);
+
     _loadUser();
     _repo = TransactionRepository();
     _controller = AnimationController(
@@ -47,7 +50,7 @@ class HomeScreenState extends State<HomeScreen>
       end: 6.0,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
     _controller.repeat(reverse: true);
-    
+
     // Load data after frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshFromDb();
@@ -56,45 +59,56 @@ class HomeScreenState extends State<HomeScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
+  // Called when app lifecycle changes
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('📱 HOME SCREEN: App resumed - refreshing data');
+      _refreshFromDb();
+    }
+  }
+
   // Public method for external refresh
   Future<void> refreshData() async {
     debugPrint('🔄 HOME SCREEN: External refresh requested');
-    _needsRefresh = true;
     await _refreshFromDb();
   }
 
   Future<void> _refreshFromDb() async {
     if (!mounted) return;
-    
+
     debugPrint('📊 HOME SCREEN: Loading transactions...');
-    
+
     try {
       // Get all transactions from database
       final rows = await _repo.getAll();
       debugPrint('📖 Found ${rows.length} total transactions');
-      
+
       if (!mounted) return;
-      
+
       // Calculate current month totals
       final now = DateTime.now();
       double monthIncome = 0;
       double monthExpense = 0;
-      
+
       // Process all transactions
       final List<Map<String, dynamic>> allTransactions = [];
-      
+
       for (final row in rows) {
         // Parse transaction data
         final amount = (row['amount'] as num?)?.toDouble() ?? 0;
         final type = (row['type'] as String?)?.toLowerCase() ?? '';
         final dateStr = row['date'] as String? ?? '';
         final date = DateTime.tryParse(dateStr) ?? now;
-        
+
         // Check if transaction is in current month
         if (date.year == now.year && date.month == now.month) {
           if (type == 'income') {
@@ -103,13 +117,13 @@ class HomeScreenState extends State<HomeScreen>
             monthExpense += amount;
           }
         }
-        
+
         // Add to transaction list
         allTransactions.add({
           'id': row['id'],
           'type': row['type'],
-          'title': (row['note'] as String?)?.isNotEmpty == true 
-              ? row['note'] 
+          'title': (row['note'] as String?)?.isNotEmpty == true
+              ? row['note']
               : row['category'],
           'subtitle': row['category'],
           'amount': amount,
@@ -121,24 +135,25 @@ class HomeScreenState extends State<HomeScreen>
               ? (row['category'] as String).substring(0, 1).toUpperCase()
               : '?',
           'icon': row['icon'],
+          'auto_detected': row['auto_detected'] == 1,
         });
       }
-      
+
       // Sort transactions by date (newest first)
       allTransactions.sort((a, b) {
         final dateA = a['date'] as DateTime;
         final dateB = b['date'] as DateTime;
         return dateB.compareTo(dateA);
       });
-      
+
       // Calculate balance
       final balance = monthIncome - monthExpense;
-      
+
       debugPrint('💰 Current Month Summary:');
       debugPrint('   Income: ₹$monthIncome');
       debugPrint('   Expense: ₹$monthExpense');
       debugPrint('   Balance: ₹$balance');
-      
+
       // Update UI
       if (mounted) {
         setState(() {
@@ -148,9 +163,8 @@ class HomeScreenState extends State<HomeScreen>
           _expenses = monthExpense;
           _totalBalance = balance;
           _isLoading = false;
-          _needsRefresh = false;
         });
-        
+
         debugPrint('✅ UI Updated Successfully');
       }
     } catch (e) {
@@ -218,14 +232,7 @@ class HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
-    // Check if we need to refresh when building
-    if (_needsRefresh && !_isLoading) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _refreshFromDb();
-      });
-    }
-    
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
@@ -234,7 +241,7 @@ class HomeScreenState extends State<HomeScreen>
           Positioned(
             child: Image.asset(AppImages.curvedBackground, fit: BoxFit.cover),
           ),
-          
+
           SafeArea(
             child: RefreshIndicator(
               onRefresh: _refreshFromDb,
@@ -290,9 +297,9 @@ class HomeScreenState extends State<HomeScreen>
                           ),
                         ],
                       ),
-                      
+
                       const SizedBox(height: 20),
-                      
+
                       // Balance Card
                       AnimatedBuilder(
                         animation: _bobAnimation,
@@ -307,9 +314,10 @@ class HomeScreenState extends State<HomeScreen>
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => const FilteredTransactionsScreen(
-                                  type: 'All',
-                                ),
+                                builder: (_) =>
+                                    const FilteredTransactionsScreen(
+                                      type: 'All',
+                                    ),
                               ),
                             ).then((_) => _refreshFromDb());
                           },
@@ -346,9 +354,14 @@ class HomeScreenState extends State<HomeScreen>
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  FormatUtils.formatCurrency(_totalBalance, compact: false),
+                                  FormatUtils.formatCurrency(
+                                    _totalBalance,
+                                    compact: false,
+                                  ),
                                   style: TextStyle(
-                                    color: _totalBalance >= 0 ? Colors.white : Colors.red.shade300,
+                                    color: _totalBalance >= 0
+                                        ? Colors.white
+                                        : Colors.red.shade300,
                                     fontSize: 32,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -380,9 +393,9 @@ class HomeScreenState extends State<HomeScreen>
                           ),
                         ),
                       ),
-                      
+
                       const SizedBox(height: 24),
-                      
+
                       // Transactions Section
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -401,9 +414,10 @@ class HomeScreenState extends State<HomeScreen>
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const FilteredTransactionsScreen(
-                                      type: 'All',
-                                    ),
+                                    builder: (_) =>
+                                        const FilteredTransactionsScreen(
+                                          type: 'All',
+                                        ),
                                   ),
                                 ).then((_) => _refreshFromDb());
                               },
@@ -411,9 +425,9 @@ class HomeScreenState extends State<HomeScreen>
                             ),
                         ],
                       ),
-                      
+
                       const SizedBox(height: 12),
-                      
+
                       // Transaction List
                       if (_isLoading)
                         const Center(
@@ -446,7 +460,8 @@ class HomeScreenState extends State<HomeScreen>
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Tap + to add your first transaction',
+                                  'Tap + to add your first transaction\nor enable notification access',
+                                  textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 14,
                                     color: Colors.grey.shade500,
@@ -517,10 +532,7 @@ class HomeScreenState extends State<HomeScreen>
                 children: [
                   Text(
                     label,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                   Text(
                     FormatUtils.formatCurrency(value, compact: false),
@@ -542,7 +554,8 @@ class HomeScreenState extends State<HomeScreen>
   Widget _buildTransactionTile(Map<String, dynamic> tx) {
     final isIncome = (tx['type'] as String).toLowerCase() == 'income';
     final color = isIncome ? AppColors.income : AppColors.expense;
-    
+    final isAutoDetected = tx['auto_detected'] == true;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
       child: Material(
@@ -563,20 +576,45 @@ class HomeScreenState extends State<HomeScreen>
             padding: const EdgeInsets.all(12.0),
             child: Row(
               children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    tx['icon'] != null
-                        ? IconData(tx['icon'] as int, fontFamily: 'MaterialIcons')
-                        : _iconForNote(tx['note'] as String?),
-                    color: color,
-                    size: 24,
-                  ),
+                Stack(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        tx['icon'] != null
+                            ? IconData(
+                                tx['icon'] as int,
+                                fontFamily: 'MaterialIcons',
+                              )
+                            : _iconForNote(tx['note'] as String?),
+                        color: color,
+                        size: 24,
+                      ),
+                    ),
+                    if (isAutoDetected)
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: Colors.blue,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 1),
+                          ),
+                          child: const Icon(
+                            Icons.auto_awesome,
+                            size: 10,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(width: 12),
                 Expanded(
