@@ -3,69 +3,65 @@ import 'package:flutter/material.dart';
 import 'package:buddy/views/screens/onboarding/splashscreen/splash_screen.dart';
 import 'package:buddy/utils/colors.dart';
 import 'package:buddy/services/notification_service.dart';
+import 'package:buddy/services/notification_helper.dart';
 import 'package:buddy/services/db_helper.dart';
-import 'package:buddy/repositories/transaction_repository.dart';
-import 'package:buddy/models/transaction.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Ensure DB initialized
-  await DatabaseHelper.instance.initdb();
+  debugPrint('🚀 APP: Starting initialization...');
 
-  // Initialize notification service and pass a callback
-  await _initializeNotificationService();
+  // 1. Initialize Database
+  try {
+    await DatabaseHelper.instance.initdb();
+    debugPrint('✅ APP: Database initialized');
+  } catch (e) {
+    debugPrint('❌ APP: Database initialization failed: $e');
+  }
+
+  // 2. Initialize Notification Helper (for showing notifications)
+  try {
+    await NotificationHelper.initialize();
+    debugPrint('✅ APP: Notification helper initialized');
+  } catch (e) {
+    debugPrint('❌ APP: Notification helper initialization failed: $e');
+  }
+
+  // 3. Request notification permissions
+  try {
+    await NotificationHelper.requestNotificationPermission();
+    debugPrint('✅ APP: Notification permissions requested');
+  } catch (e) {
+    debugPrint('⚠️ APP: Notification permission request failed: $e');
+  }
+
+  // 4. Check if auto-detection is enabled
+  try {
+    final isAutoDetectionEnabled =
+        await NotificationService.isAutoDetectionEnabled();
+    debugPrint('ℹ️ APP: Auto-detection enabled: $isAutoDetectionEnabled');
+
+    if (isAutoDetectionEnabled) {
+      // Check if we have notification listener access
+      final hasAccess = await NotificationService.requestNotificationAccess();
+
+      if (hasAccess) {
+        // Start listening for notifications
+        await NotificationService.startListening();
+        debugPrint('✅ APP: Notification listener started');
+      } else {
+        debugPrint('⚠️ APP: Notification listener access not granted');
+      }
+    } else {
+      debugPrint('ℹ️ APP: Auto-detection disabled, not starting listener');
+    }
+  } catch (e) {
+    debugPrint('⚠️ APP: Failed to start notification listener: $e');
+  }
+
+  debugPrint('🎉 APP: Initialization complete\n');
 
   runApp(const MyApp());
-}
-
-Future<void> _initializeNotificationService() async {
-  try {
-    debugPrint('🚀 MAIN: Initializing notification service...');
-
-    final repo = TransactionRepository();
-
-    // Start listening and provide callback that saves to repository
-    await NotificationService.startListening((transactionMap, hash) async {
-      try {
-        debugPrint('💾 MAIN: Received transaction from notification service');
-
-        // Convert map -> TransactionModel
-        final txModel = TransactionModel(
-          amount: (transactionMap['amount'] as num).toDouble(),
-          type: transactionMap['type'] as String,
-          date: DateTime.parse(transactionMap['date'] as String),
-          note: transactionMap['note'] as String?,
-          category: transactionMap['category'] as String,
-          icon: (transactionMap['icon'] as num).toInt(),
-          autoDetected:
-              (transactionMap['auto_detected'] == 1) ||
-              (transactionMap['auto_detected'] == true),
-          notificationSource: transactionMap['notification_source'] as String?,
-          notificationHash: hash,
-        );
-
-        // Save via repository
-        final id = await repo.addAutoDetected(
-          txModel,
-          notificationSource: txModel.notificationSource ?? 'unknown',
-          notificationHash: hash,
-        );
-
-        if (id > 0) {
-          debugPrint('✅ MAIN: Transaction saved successfully (id=$id)');
-        } else {
-          debugPrint('⚠️ MAIN: Transaction not saved (probably duplicate)');
-        }
-      } catch (e) {
-        debugPrint('❌ MAIN: Error saving transaction: $e');
-      }
-    });
-
-    debugPrint('✅ MAIN: Notification service initialized successfully');
-  } catch (e) {
-    debugPrint('⚠️ MAIN: Notification service failed to start: $e');
-  }
 }
 
 class MyApp extends StatelessWidget {

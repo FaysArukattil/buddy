@@ -6,6 +6,7 @@ import 'package:buddy/views/screens/bottomnavbarscreen/profile_screen.dart';
 import 'package:buddy/views/screens/transaction_detail_screen.dart';
 import 'package:buddy/views/screens/filtered_transactions_screen.dart';
 import 'package:buddy/repositories/transaction_repository.dart';
+import 'package:buddy/views/widgets/setting_modal.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -259,30 +260,68 @@ class HomeScreenState extends State<HomeScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Header
+                      // Update the header section in home_screen.dart
+                      // Replace the existing header Row with this:
+
+                      // Header with Settings Icon
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _greeting(),
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey.shade600,
+                          // Settings Icon (LEFT)
+                          IconButton(
+                            onPressed: () {
+                              showModalBottomSheet(
+                                context: context,
+                                backgroundColor: Colors.transparent,
+                                isScrollControlled: true,
+                                builder: (context) => SettingsModal(
+                                  onDataCleared: () {
+                                    _refreshFromDb();
+                                  },
                                 ),
+                              );
+                            },
+                            icon: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _displayName,
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textPrimary,
-                                ),
+                              child: Icon(
+                                Icons.settings_rounded,
+                                size: 24,
+                                color: AppColors.primary,
                               ),
-                            ],
+                            ),
                           ),
+
+                          // Greeting and Name (CENTER)
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _greeting(),
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _displayName,
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Profile Icon (RIGHT)
                           IconButton(
                             onPressed: () {
                               Navigator.push(
@@ -301,6 +340,8 @@ class HomeScreenState extends State<HomeScreen>
                         ],
                       ),
 
+                      // Don't forget to add this import at the top of home_screen.dart:
+                      // import 'package:buddy/views/widgets/settings_modal.dart';
                       const SizedBox(height: 20),
 
                       // Balance Card
