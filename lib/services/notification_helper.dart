@@ -17,11 +17,20 @@ class NotificationHelper {
     const androidSettings = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
     );
-    const initSettings = InitializationSettings(android: androidSettings);
+
+    const DarwinInitializationSettings initializationSettingsDarwin =
+        DarwinInitializationSettings();
+
+    const initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: initializationSettingsDarwin,
+    );
 
     await _notifications.initialize(
       initSettings,
       onDidReceiveNotificationResponse: _onNotificationTapped,
+      onDidReceiveBackgroundNotificationResponse:
+          _onBackgroundNotificationTapped,
     );
 
     _isInitialized = true;
@@ -61,48 +70,91 @@ class NotificationHelper {
     return false;
   }
 
+  // Background notification handler (must be top-level function)
+  @pragma('vm:entry-point')
+  static void _onBackgroundNotificationTapped(NotificationResponse response) {
+    debugPrint('📱 Background notification tapped: ${response.actionId}');
+    _handleNotificationAction(response);
+  }
+
   static void _onNotificationTapped(NotificationResponse response) async {
     debugPrint(
-      '📱 Notification tapped: ${response.payload}, action: ${response.actionId}',
+      '📱 Notification tapped: payload=${response.payload}, action=${response.actionId}, input=${response.input}',
     );
+    await _handleNotificationAction(response);
+  }
 
-    if (response.payload == null) return;
+  static Future<void> _handleNotificationAction(
+    NotificationResponse response,
+  ) async {
+    if (response.payload == null) {
+      debugPrint('⚠️ No payload in notification response');
+      return;
+    }
 
     final hash = response.payload!;
+    debugPrint('🔑 Processing action for hash: $hash');
+    debugPrint('🎯 Action ID: ${response.actionId ?? "NULL - Body Tapped"}');
 
     try {
       // Get pending transaction
       final pendingData = await DatabaseHelper.instance.getPendingTransaction(
         hash,
       );
+
       if (pendingData == null) {
         debugPrint('⚠️ No pending transaction found for hash: $hash');
         return;
       }
 
-      if (response.actionId == 'yes' || response.actionId == null) {
-        // User confirmed (either tapped "Yes" or notification body)
-        debugPrint('✅ User confirmed duplicate transaction');
+      debugPrint(
+        '📦 Found pending data: ${pendingData['amount']} ${pendingData['type']}',
+      );
+
+      // FIX: Check both 'yes' and 'action_yes' (some Android versions use different format)
+      if (response.actionId == 'action_yes' ||
+          response.actionId == 'yes' ||
+          (response.actionId == null && response.input == 'yes')) {
+        // User confirmed
+        debugPrint('✅ User clicked YES - Adding transaction');
+
         final id = await DatabaseHelper.instance.insertAutoTransaction(
           pendingData,
         );
+
         if (id > 0) {
-          debugPrint('✅ Duplicate transaction added (id=$id)');
-          await NotificationHelper.showTransactionAdded(
+          debugPrint('✅ Transaction successfully added (id=$id)');
+
+          await showTransactionAdded(
             amount: pendingData['amount'] as double,
             type: pendingData['type'] as String,
             category: pendingData['category'] as String,
           );
+        } else {
+          debugPrint('❌ Failed to add transaction (id=$id)');
         }
-      } else if (response.actionId == 'no') {
-        // User rejected
-        debugPrint('❌ User rejected duplicate transaction');
-      }
 
-      // Clean up pending transaction
-      await DatabaseHelper.instance.removePendingTransaction(hash);
-    } catch (e) {
+        await DatabaseHelper.instance.removePendingTransaction(hash);
+        await _notifications.cancel(hash.hashCode);
+      } else if (response.actionId == 'action_no' ||
+          response.actionId == 'no' ||
+          (response.actionId == null && response.input == 'no')) {
+        // User rejected
+        debugPrint('❌ User clicked NO - Ignoring transaction');
+
+        await DatabaseHelper.instance.removePendingTransaction(hash);
+        await _notifications.cancel(hash.hashCode);
+
+        debugPrint('✅ Transaction ignored and notification dismissed');
+      } else {
+        // Body tapped - do nothing, keep notification
+        debugPrint(
+          'ℹ️ Notification body tapped - Keeping notification for user choice',
+        );
+      }
+    } catch (e, stackTrace) {
       debugPrint('❌ Error handling notification action: $e');
+      debugPrint('Stack trace: $stackTrace');
     }
   }
 
@@ -120,32 +172,48 @@ class NotificationHelper {
     const channelName = 'Transaction Confirmations';
     const channelDesc = 'Notifications to confirm duplicate transactions';
 
+    // FIX: Use proper action IDs with 'action_' prefix
     final androidDetails = AndroidNotificationDetails(
       channelId,
       channelName,
       channelDescription: channelDesc,
-      importance: Importance.high,
+      importance: Importance.max,
       priority: Priority.high,
+      ongoing: false,
+      autoCancel: false,
+      enableVibration: true,
+      playSound: true,
+      category: AndroidNotificationCategory.message,
+      visibility: NotificationVisibility.public,
+      // Use contextual actions instead of regular actions
       actions: <AndroidNotificationAction>[
-        const AndroidNotificationAction(
-          'yes',
+        AndroidNotificationAction(
+          'action_yes', // Changed from 'yes' to 'action_yes'
           '✅ Yes, Add',
-          showsUserInterface: false,
+          titleColor: const Color(0xFF4CAF50),
+          showsUserInterface: true, // Changed to true
+          cancelNotification: true, // Auto-dismiss after tap
         ),
-        const AndroidNotificationAction(
-          'no',
+        AndroidNotificationAction(
+          'action_no', // Changed from 'no' to 'action_no'
           '❌ No, Ignore',
-          showsUserInterface: false,
+          titleColor: const Color(0xFFf44336),
+          showsUserInterface: true, // Changed to true
+          cancelNotification: true, // Auto-dismiss after tap
         ),
       ],
+      styleInformation: BigTextStyleInformation(
+        'Found $similarCount similar transaction(s) in last 24 hours.\n\nTap "Yes" to add this transaction or "No" to ignore it.',
+        contentTitle: '⚠️ Possible Duplicate',
+        summaryText: '$type: ₹$amount',
+      ),
     );
 
     final notificationDetails = NotificationDetails(android: androidDetails);
 
     final typeIcon = type == 'expense' ? '💸' : '💰';
-    final title = 'Possible Duplicate Transaction?';
-    final body =
-        '$typeIcon ₹$amount ($category)\n$similarCount similar transaction(s) found in last 24h.\nWould you like to add this transaction?';
+    final title = '⚠️ Duplicate Transaction?';
+    final body = '$typeIcon ₹$amount ($category) - Found $similarCount similar';
 
     await _notifications.show(
       transactionHash.hashCode,
@@ -156,7 +224,7 @@ class NotificationHelper {
     );
 
     debugPrint(
-      '🔔 Shown duplicate confirmation for ₹$amount (found $similarCount similar)',
+      '🔔 Shown duplicate confirmation for ₹$amount (hash: ${transactionHash.hashCode})',
     );
   }
 
@@ -176,17 +244,23 @@ class NotificationHelper {
       channelId,
       channelName,
       channelDescription: channelDesc,
-      importance: Importance.low,
-      priority: Priority.low,
-      playSound: false,
-      enableVibration: false,
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+      playSound: true,
+      enableVibration: true,
+      autoCancel: true,
+      styleInformation: BigTextStyleInformation(
+        'Your transaction has been automatically added to your expense tracker.',
+        contentTitle: '✅ Transaction Added',
+        summaryText: '$type: ₹$amount',
+      ),
     );
 
     final notificationDetails = NotificationDetails(android: androidDetails);
 
     final typeIcon = type == 'expense' ? '💸' : '💰';
-    final title = 'Transaction Added';
-    final body = '$typeIcon ₹$amount ($category)';
+    final title = '✅ Transaction Added';
+    final body = '$typeIcon ₹$amount - $category';
 
     await _notifications.show(
       DateTime.now().millisecondsSinceEpoch % 100000,
@@ -194,6 +268,8 @@ class NotificationHelper {
       body,
       notificationDetails,
     );
+
+    debugPrint('🔔 Shown success notification for ₹$amount');
   }
 
   /// Cancel notification

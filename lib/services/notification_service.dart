@@ -20,6 +20,9 @@ class NotificationService {
   static StreamSubscription? _notificationSubscription;
   static bool _isListening = false;
 
+  // Track recently processed notifications to prevent duplicates
+  static final Set<String> _recentlyProcessed = {};
+
   // FIXED: More specific regex patterns
   static final RegExp _debitRegex = RegExp(
     r'\b(debited|spent|purchase|paid|withdrawn|debit|payment|sent|transferred|transfer to|paid to)\b',
@@ -245,6 +248,50 @@ class NotificationService {
 
       debugPrint('📬 NOTIFICATION: $packageName | $title | $content');
 
+      // CRITICAL FIX 0: Check if this exact notification was just processed
+      final notificationKey = '$packageName|$title|$content';
+      if (_recentlyProcessed.contains(notificationKey)) {
+        debugPrint(
+          '   🚫 Skipping - same notification already processed recently',
+        );
+        return null;
+      }
+
+      // CRITICAL FIX 1: Ignore your own app's notifications
+      if (packageName == 'com.example.buddy' ||
+          packageName.contains('example.buddy')) {
+        debugPrint('   🚫 Skipping own app notification');
+        return null;
+      }
+
+      // CRITICAL FIX 2: Ignore duplicate/confirmation related notifications by content
+      final lowerTitle = title.toLowerCase();
+      final lowerContent = content.toLowerCase();
+
+      if (lowerTitle.contains('duplicate') ||
+          lowerContent.contains('duplicate') ||
+          lowerTitle.contains('transaction added') ||
+          lowerContent.contains('transaction added') ||
+          lowerTitle.contains('tap here to add') ||
+          lowerTitle.contains('tap here to ignore') ||
+          lowerTitle.contains('possible duplicate') ||
+          lowerContent.contains('similar in last') ||
+          lowerContent.contains('found 1 similar') ||
+          lowerContent.contains('found 2 similar') ||
+          lowerContent.contains('found 3 similar') ||
+          lowerContent.contains('similar transaction')) {
+        debugPrint('   🚫 Skipping duplicate/confirmation notification');
+        return null;
+      }
+
+      // Mark this notification as recently processed
+      _recentlyProcessed.add(notificationKey);
+
+      // Clean up old entries after 5 seconds
+      Future.delayed(const Duration(seconds: 5), () {
+        _recentlyProcessed.remove(notificationKey);
+      });
+
       final isFinancial = _isFromFinancialApp(packageName);
       debugPrint('   💰 Is financial: $isFinancial');
       if (!isFinancial) return null;
@@ -258,12 +305,24 @@ class NotificationService {
 
       final hash = _generateHash(fullText, timestamp);
 
-      // Check if this EXACT notification was already processed (exact hash match)
+      // CRITICAL: Check if this EXACT notification was already processed
+      // This check happens BEFORE checking for similar transactions
       final isDuplicateHash = await DatabaseHelper.instance
           .isDuplicateTransaction(hash);
       if (isDuplicateHash) {
         debugPrint(
-          '   ⚠️ Exact duplicate notification detected (same hash) - skipping',
+          '   ⚠️ Exact duplicate notification (same hash) - already processed, skipping',
+        );
+        return null;
+      }
+
+      // Also check if we have a pending transaction with this hash
+      final pendingExists = await DatabaseHelper.instance.getPendingTransaction(
+        hash,
+      );
+      if (pendingExists != null) {
+        debugPrint(
+          '   ⚠️ Pending transaction already exists with this hash - skipping',
         );
         return null;
       }
@@ -319,6 +378,14 @@ class NotificationService {
       }
 
       // No similar transaction - add directly without asking
+      // But first check if this hash already exists (extra safety)
+      final alreadyExists = await DatabaseHelper.instance
+          .isDuplicateTransaction(hash);
+      if (alreadyExists) {
+        debugPrint('⚠️ Transaction with this hash already exists - skipping');
+        return null;
+      }
+
       final id = await DatabaseHelper.instance.insertAutoTransaction(
         transactionMap,
       );
@@ -342,7 +409,15 @@ class NotificationService {
 
   static bool _isFromFinancialApp(String packageName) {
     if (packageName.isEmpty) return true;
+
+    // CRITICAL: Ignore notifications from your own app!
+    if (packageName == 'com.example.buddy' ||
+        packageName.contains('example.buddy')) {
+      return false;
+    }
+
     if (_financialApps.contains(packageName)) return true;
+
     final bankPatterns = [
       'bank',
       'upi',
@@ -528,8 +603,9 @@ class NotificationService {
   }
 
   static String _generateHash(String text, DateTime timestamp) {
-    final combined = '$text${timestamp.millisecondsSinceEpoch}';
-    final bytes = utf8.encode(combined);
+    // Use only the text for hash, not timestamp
+    // This way the same notification won't create different hashes
+    final bytes = utf8.encode(text);
     final digest = sha256.convert(bytes);
     return digest.toString();
   }
