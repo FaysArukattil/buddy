@@ -12,7 +12,6 @@ typedef OnTransactionDetected =
     Future<void> Function(Map<String, Object?> transactionMap, String hash);
 
 class NotificationService {
-  // METHOD CHANNEL NAME MATCHES MainActivity.kt
   static const MethodChannel _nativeChannel = MethodChannel(
     'notification_channel',
   );
@@ -20,14 +19,14 @@ class NotificationService {
   static StreamSubscription? _notificationSubscription;
   static bool _isListening = false;
 
-  // Regex patterns
+  // FIXED: More specific regex patterns
   static final RegExp _debitRegex = RegExp(
-    r'\b(debited|spent|purchase|paid|withdrawn|debit|payment|sent|transferred)\b',
+    r'\b(debited|spent|purchase|paid|withdrawn|debit|payment|sent|transferred|transfer to|paid to)\b',
     caseSensitive: false,
   );
 
   static final RegExp _creditRegex = RegExp(
-    r'\b(credited|received|deposit|income|credit|refund|cashback)\b',
+    r'\b(credited|received|deposit|income|credit|refund|cashback|received from|got)\b',
     caseSensitive: false,
   );
 
@@ -36,31 +35,42 @@ class NotificationService {
     caseSensitive: false,
   );
 
+  // Corrected package names for PhonePe and Paytm
   static final List<String> _financialApps = [
+    // SMS/Messaging apps
     'com.google.android.apps.messaging',
     'com.android.messaging',
     'com.samsung.android.messaging',
     'com.android.mms',
     'com.textra',
-    'com.phonepe.app',
-    'com.google.android.apps.nbu.paisa.user',
-    'in.org.npci.upiapp',
-    'net.one97.paytm',
+
+    // Payment apps
+    'com.phonepe.app', // PhonePe
+    'com.google.android.apps.nbu.paisa.user', // Google Pay
+    'in.org.npci.upiapp', // BHIM UPI
+    'net.one97.paytm', // Paytm
+    'com.paytm', // Paytm alternate
+    // E-commerce
     'com.amazon.mShop.android.shopping',
     'in.amazon.mShop.android.shopping',
+
+    // Wallets
     'com.mobikwik_new',
     'com.freecharge.android',
+
+    // Banking apps
     'com.sbi.SBIFreedomPlus',
     'com.icicibank.mobile.iciciappathon',
     'com.hdfcbank.payzapp',
     'com.axisbank.mobile',
     'com.kotakbank.mobile',
     'com.indusind.mobile',
+
+    // Communication (for bank SMS)
     'com.whatsapp',
     'com.truecaller',
   ];
 
-  /// Request notification listener permission
   static Future<bool> requestNotificationAccess() async {
     debugPrint('🔔 NOTIFICATION: Requesting notification access...');
     final isGranted = await NotificationListenerService.isPermissionGranted();
@@ -73,13 +83,11 @@ class NotificationService {
     return false;
   }
 
-  /// Check if auto-detection is enabled
   static Future<bool> isAutoDetectionEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool('auto_detect_transactions') ?? true;
   }
 
-  /// Enable / disable auto-detection
   static Future<void> setAutoDetectionEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('auto_detect_transactions', enabled);
@@ -90,8 +98,6 @@ class NotificationService {
     }
   }
 
-  /// Start listening - accepts optional callback:
-  /// onTransactionDetected(Map<String,Object?> transactionMap, String hash)
   static Future<void> startListening([
     OnTransactionDetected? onTransactionDetected,
   ]) async {
@@ -117,7 +123,6 @@ class NotificationService {
 
     debugPrint('🎧 NOTIFICATION: Starting notification listener...');
 
-    // 1) Listen to the notification_listener_service stream (if available)
     try {
       _notificationSubscription = NotificationListenerService
           .notificationsStream
@@ -125,7 +130,6 @@ class NotificationService {
             (event) async {
               try {
                 final result = await _handleNotification(event);
-                // If result is not null, optionally propagate to callback
                 if (result != null && onTransactionDetected != null) {
                   final transactionMap =
                       result['transactionMap'] as Map<String, Object?>;
@@ -150,7 +154,6 @@ class NotificationService {
       );
     }
 
-    // 2) Also listen to native MethodChannel calls from MainActivity (fallback)
     _nativeChannel.setMethodCallHandler((call) async {
       try {
         debugPrint(
@@ -193,13 +196,11 @@ class NotificationService {
     debugPrint('✅ NOTIFICATION: Listener started (stream + MethodChannel)');
   }
 
-  /// Stop listening
   static Future<void> stopListening() async {
     if (!_isListening) return;
     try {
       await _notificationSubscription?.cancel();
       _notificationSubscription = null;
-      // Remove method handler (optional)
       _nativeChannel.setMethodCallHandler(null);
       _isListening = false;
       debugPrint('🛑 NOTIFICATION: Listener stopped');
@@ -208,12 +209,10 @@ class NotificationService {
     }
   }
 
-  /// Returns { 'transactionMap': Map, 'hash': String } when inserted, else null
   static Future<Map<String, Object?>?> _handleNotification(
     dynamic event,
   ) async {
     try {
-      // Support both plugin event objects and plain Maps from MethodChannel
       String packageName = '';
       String title = '';
       String content = '';
@@ -317,13 +316,86 @@ class NotificationService {
     return false;
   }
 
+  // FIXED: Correct GPay logic - "paid you" = credit, "you paid" = debit
   static Map<String, dynamic>? _parseTransaction(String text, String source) {
-    final isDebit = _debitRegex.hasMatch(text);
-    final isCredit = _creditRegex.hasMatch(text);
-    if (!isDebit && !isCredit) return null;
+    debugPrint('🔍 PARSING: "$text"');
+
+    final lowerText = text.toLowerCase();
+    bool isDebit = false;
+    bool isCredit = false;
+
+    // === CRITICAL LOGIC FOR GPAY & UPI APPS ===
+    // GPay format: "[Name] paid you ₹X" = CREDIT (money IN)
+    // GPay format: "You paid [Name] ₹X" = DEBIT (money OUT)
+
+    // Check for "paid you" pattern (CREDIT - money received)
+    if (lowerText.contains('paid you') ||
+        lowerText.contains('sent you') ||
+        lowerText.contains('transferred you') ||
+        lowerText.contains('received from')) {
+      isCredit = true;
+      debugPrint('   💰 Pattern: Someone paid YOU → CREDIT');
+    }
+    // Check for "you paid" or "you sent" pattern (DEBIT - money sent)
+    else if (lowerText.contains('you paid') ||
+        lowerText.contains('you sent') ||
+        lowerText.contains('you transferred') ||
+        lowerText.contains('paid to') ||
+        lowerText.contains('payment to')) {
+      isDebit = true;
+      debugPrint('   💸 Pattern: YOU paid someone → DEBIT');
+    }
+    // Bank SMS patterns (money debited FROM your account = DEBIT)
+    else if (lowerText.contains('debited from your') ||
+        lowerText.contains('withdrawn from your') ||
+        lowerText.contains('deducted from your')) {
+      isDebit = true;
+      debugPrint('   💸 Pattern: Debited FROM your account → DEBIT');
+    }
+    // Bank SMS patterns (money credited TO your account = CREDIT)
+    else if (lowerText.contains('credited to your') ||
+        lowerText.contains('deposited to your') ||
+        lowerText.contains('added to your')) {
+      isCredit = true;
+      debugPrint('   💰 Pattern: Credited TO your account → CREDIT');
+    }
+    // Refund/Cashback patterns (always CREDIT)
+    else if (lowerText.contains('refund') ||
+        lowerText.contains('cashback') ||
+        lowerText.contains('reward')) {
+      isCredit = true;
+      debugPrint('   💰 Pattern: Refund/Cashback → CREDIT');
+    }
+    // Generic fallback patterns
+    else {
+      final hasDebitKeyword = _debitRegex.hasMatch(text);
+      final hasCreditKeyword = _creditRegex.hasMatch(text);
+
+      if (hasDebitKeyword && !hasCreditKeyword) {
+        isDebit = true;
+        debugPrint('   💸 Fallback: Debit keyword found → DEBIT');
+      } else if (hasCreditKeyword && !hasDebitKeyword) {
+        isCredit = true;
+        debugPrint('   💰 Fallback: Credit keyword found → CREDIT');
+      } else if (hasDebitKeyword && hasCreditKeyword) {
+        // When both present, prefer debit (safer assumption for expenses)
+        isDebit = true;
+        debugPrint('   ⚠️ Both keywords found, defaulting to DEBIT');
+      }
+    }
+
+    debugPrint('   Final decision - Debit: $isDebit, Credit: $isCredit');
+
+    if (!isDebit && !isCredit) {
+      debugPrint('   ❌ No transaction type detected');
+      return null;
+    }
 
     final amountMatch = _amountRegex.firstMatch(text);
-    if (amountMatch == null) return null;
+    if (amountMatch == null) {
+      debugPrint('   ❌ No amount found');
+      return null;
+    }
 
     final amountStr =
         (amountMatch.group(1) ??
@@ -333,11 +405,16 @@ class NotificationService {
             .replaceAll(',', '')
             .trim();
     final amount = double.tryParse(amountStr);
-    if (amount == null || amount <= 0) return null;
+    if (amount == null || amount <= 0) {
+      debugPrint('   ❌ Invalid amount: $amountStr');
+      return null;
+    }
 
     final type = isDebit ? 'expense' : 'income';
     final category = _detectCategory(text, type);
     final icon = _getIconForCategory(category);
+
+    debugPrint('   ✅ Parsed: ₹$amount as $type ($category)');
 
     return {
       'amount': amount,
@@ -418,7 +495,6 @@ class NotificationService {
     );
   }
 
-  /// Optional debug helper - test parsing locally
   static Future<void> testNotificationParsing(String testMessage) async {
     debugPrint('🧪 TEST PARSING: $testMessage');
     final result = _parseTransaction(testMessage, 'com.test.app');
@@ -431,7 +507,6 @@ class NotificationService {
     }
   }
 
-  /// Get debug info
   static Future<Map<String, dynamic>> getDebugInfo() async {
     final isGranted = await NotificationListenerService.isPermissionGranted();
     final isEnabled = await isAutoDetectionEnabled();
