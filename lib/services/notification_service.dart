@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'db_helper.dart';
+import 'notification_helper.dart';
 
 typedef OnTransactionDetected =
     Future<void> Function(Map<String, Object?> transactionMap, String hash);
@@ -256,13 +257,24 @@ class NotificationService {
       }
 
       final hash = _generateHash(fullText, timestamp);
-      final isDuplicate = await DatabaseHelper.instance.isDuplicateTransaction(
-        hash,
-      );
-      if (isDuplicate) {
-        debugPrint('   ⚠️ Duplicate detected (hash) - skipping');
+
+      // Check if this EXACT notification was already processed (exact hash match)
+      final isDuplicateHash = await DatabaseHelper.instance
+          .isDuplicateTransaction(hash);
+      if (isDuplicateHash) {
+        debugPrint(
+          '   ⚠️ Exact duplicate notification detected (same hash) - skipping',
+        );
         return null;
       }
+
+      // Check for similar transactions (same amount and type) in last 24 hours
+      final similarTransactions = await DatabaseHelper.instance
+          .findSimilarTransactions(
+            amount: txnData['amount'] as double,
+            type: txnData['type'] as String,
+            hoursWindow: 24,
+          );
 
       final transactionMap = <String, Object?>{
         'amount': txnData['amount'],
@@ -276,17 +288,50 @@ class NotificationService {
         'notification_hash': hash,
       };
 
+      // If similar transactions exist, ALWAYS ask for confirmation
+      if (similarTransactions.isNotEmpty) {
+        debugPrint(
+          '   ⚠️ Found ${similarTransactions.length} similar transaction(s) in last 24h',
+        );
+        for (var similar in similarTransactions) {
+          debugPrint(
+            '   Previous: ₹${similar['amount']} on ${similar['date']}',
+          );
+        }
+
+        // Store as pending and ask user
+        await DatabaseHelper.instance.storePendingTransaction(
+          hash,
+          transactionMap,
+        );
+
+        // Show confirmation notification
+        await NotificationHelper.showDuplicateConfirmation(
+          transactionHash: hash,
+          amount: txnData['amount'] as double,
+          type: txnData['type'] as String,
+          category: txnData['category'] as String,
+          similarCount: similarTransactions.length,
+        );
+
+        debugPrint('   📬 Waiting for user confirmation...');
+        return null; // Don't add yet, waiting for user action
+      }
+
+      // No similar transaction - add directly without asking
       final id = await DatabaseHelper.instance.insertAutoTransaction(
         transactionMap,
       );
       if (id > 0) {
         debugPrint('✅ NOTIFICATION: Auto-transaction inserted (id=$id)');
-        _showTransactionAddedFeedback(txnData);
+        await NotificationHelper.showTransactionAdded(
+          amount: txnData['amount'] as double,
+          type: txnData['type'] as String,
+          category: txnData['category'] as String,
+        );
         return {'transactionMap': transactionMap, 'hash': hash};
       } else {
-        debugPrint(
-          '⚠️ NOTIFICATION: Insert returned id=$id (possibly duplicate or error)',
-        );
+        debugPrint('⚠️ NOTIFICATION: Insert returned id=$id');
         return null;
       }
     } catch (e, st) {
@@ -487,12 +532,6 @@ class NotificationService {
     final bytes = utf8.encode(combined);
     final digest = sha256.convert(bytes);
     return digest.toString();
-  }
-
-  static void _showTransactionAddedFeedback(Map<String, dynamic> data) {
-    debugPrint(
-      '💬 FEEDBACK: Transaction added - ${data['type']} ₹${data['amount']}',
-    );
   }
 
   static Future<void> testNotificationParsing(String testMessage) async {

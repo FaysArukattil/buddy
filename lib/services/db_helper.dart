@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DatabaseHelper {
   DatabaseHelper._();
@@ -27,8 +29,8 @@ class DatabaseHelper {
 
       _database = await openDatabase(
         dbPath,
-        version: 2, // Incremented version for schema update
-        readOnly: false, // Ensure database is writable
+        version: 2,
+        readOnly: false,
         singleInstance: true,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
@@ -73,7 +75,6 @@ class DatabaseHelper {
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      // Add new columns for auto-detection
       await db.execute(
         'ALTER TABLE transactions ADD COLUMN auto_detected INTEGER DEFAULT 0',
       );
@@ -86,13 +87,16 @@ class DatabaseHelper {
       await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_transactions_hash ON transactions(notification_hash)',
       );
-      debugPrint('✅ DATABASE: Upgraded to version 2 - Added auto-detection fields');
+      debugPrint(
+        '✅ DATABASE: Upgraded to version 2 - Added auto-detection fields',
+      );
     }
   }
 
-  // Transaction-specific helpers matching your previous style
   Future<int> insertTransaction(Map<String, Object?> values) async {
-    debugPrint('💾 DATABASE: Inserting transaction: ${values['type']} ₹${values['amount']} on ${values['date']}');
+    debugPrint(
+      '💾 DATABASE: Inserting transaction: ${values['type']} ₹${values['amount']} on ${values['date']}',
+    );
     final db = await database;
     final id = await db.insert(
       'transactions',
@@ -124,7 +128,9 @@ class DatabaseHelper {
     final results = await db.query('transactions', orderBy: 'date DESC');
     debugPrint('📖 DATABASE: Retrieved ${results.length} transactions');
     for (final row in results) {
-      debugPrint('   - ${row['type']} ₹${row['amount']} (${row['category']}) [ID: ${row['id']}]');
+      debugPrint(
+        '   - ${row['type']} ₹${row['amount']} (${row['category']}) [ID: ${row['id']}]',
+      );
     }
     return results;
   }
@@ -141,7 +147,7 @@ class DatabaseHelper {
     return res.first;
   }
 
-  // Check if a transaction with the same hash already exists (duplicate prevention)
+  // Check if exact hash exists (same notification processed twice)
   Future<bool> isDuplicateTransaction(String hash) async {
     final db = await database;
     final result = await db.query(
@@ -153,24 +159,47 @@ class DatabaseHelper {
     return result.isNotEmpty;
   }
 
-  // Insert auto-detected transaction
+  // Find similar transactions (same amount and type) within time window
+  Future<List<Map<String, Object?>>> findSimilarTransactions({
+    required double amount,
+    required String type,
+    required int hoursWindow,
+  }) async {
+    final db = await database;
+    final now = DateTime.now();
+    final windowStart = now
+        .subtract(Duration(hours: hoursWindow))
+        .toIso8601String();
+
+    final results = await db.query(
+      'transactions',
+      where: 'amount = ? AND type = ? AND date >= ?',
+      whereArgs: [amount, type, windowStart],
+      orderBy: 'date DESC',
+    );
+
+    return results;
+  }
+
+  // Insert auto-detected transaction (allows duplicates, but with confirmation)
   Future<int> insertAutoTransaction(Map<String, Object?> values) async {
-    debugPrint('🤖 DATABASE: Auto-inserting transaction: ${values['type']} ₹${values['amount']} from ${values['notification_source']}');
+    debugPrint(
+      '🤖 DATABASE: Auto-inserting transaction: ${values['type']} ₹${values['amount']} from ${values['notification_source']}',
+    );
     final db = await database;
     final id = await db.insert(
       'transactions',
       values,
-      conflictAlgorithm: ConflictAlgorithm.ignore, // Ignore if duplicate hash exists
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
     if (id > 0) {
       debugPrint('✅ DATABASE: Auto-transaction saved with ID: $id');
     } else {
-      debugPrint('⚠️ DATABASE: Duplicate transaction ignored');
+      debugPrint('⚠️ DATABASE: Failed to save transaction');
     }
     return id;
   }
 
-  // Get all auto-detected transactions
   Future<List<Map<String, Object?>>> getAutoDetectedTransactions() async {
     final db = await database;
     return db.query(
@@ -179,6 +208,29 @@ class DatabaseHelper {
       whereArgs: [1],
       orderBy: 'date DESC',
     );
+  }
+
+  // Store pending transaction temporarily in SharedPreferences
+  Future<void> storePendingTransaction(
+    String hash,
+    Map<String, Object?> data,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('pending_$hash', jsonEncode(data));
+    debugPrint('💾 Stored pending transaction: $hash');
+  }
+
+  Future<Map<String, Object?>?> getPendingTransaction(String hash) async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString('pending_$hash');
+    if (jsonStr == null) return null;
+    return Map<String, Object?>.from(jsonDecode(jsonStr) as Map);
+  }
+
+  Future<void> removePendingTransaction(String hash) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('pending_$hash');
+    debugPrint('🗑️ Removed pending transaction: $hash');
   }
 
   Future<void> close() async {
