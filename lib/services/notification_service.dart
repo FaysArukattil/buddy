@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/transaction.dart';
 import 'db_helper.dart';
 import 'notification_helper.dart';
 
@@ -19,11 +20,10 @@ class NotificationService {
 
   static StreamSubscription? _notificationSubscription;
   static bool _isListening = false;
+  static OnTransactionDetected? _onTransactionDetected;
 
-  // Track recently processed notifications to prevent duplicates
   static final Set<String> _recentlyProcessed = {};
 
-  // FIXED: More specific regex patterns
   static final RegExp _debitRegex = RegExp(
     r'\b(debited|spent|purchase|paid|withdrawn|debit|payment|sent|transferred|transfer to|paid to)\b',
     caseSensitive: false,
@@ -39,39 +39,27 @@ class NotificationService {
     caseSensitive: false,
   );
 
-  // Corrected package names for PhonePe and Paytm
   static final List<String> _financialApps = [
-    // SMS/Messaging apps
     'com.google.android.apps.messaging',
     'com.android.messaging',
     'com.samsung.android.messaging',
     'com.android.mms',
-    'com.textra',
-
-    // Payment apps
-    'com.phonepe.app', // PhonePe
-    'com.google.android.apps.nbu.paisa.user', // Google Pay
-    'in.org.npci.upiapp', // BHIM UPI
-    'net.one97.paytm', // Paytm
-    'com.paytm', // Paytm alternate
-    // E-commerce
+    'com.phonepe.app',
+    'com.google.android.apps.nbu.paisa.user',
+    'in.org.npci.upiapp',
+    'net.one97.paytm',
     'com.amazon.mShop.android.shopping',
     'in.amazon.mShop.android.shopping',
-
-    // Wallets
     'com.mobikwik_new',
     'com.freecharge.android',
-
-    // Banking apps
     'com.sbi.SBIFreedomPlus',
     'com.icicibank.mobile.iciciappathon',
     'com.hdfcbank.payzapp',
     'com.axisbank.mobile',
     'com.kotakbank.mobile',
     'com.indusind.mobile',
-
-    // Communication (for bank SMS)
     'com.whatsapp',
+    'com.whatsapp.w4b',
     'com.truecaller',
   ];
 
@@ -80,11 +68,41 @@ class NotificationService {
     final isGranted = await NotificationListenerService.isPermissionGranted();
     if (isGranted) {
       debugPrint('✅ NOTIFICATION: Permission already granted');
+      await startBackgroundService();
       return true;
     }
     debugPrint('⚠️ NOTIFICATION: Opening settings to grant permission');
     await NotificationListenerService.requestPermission();
     return false;
+  }
+
+  static Future<void> startBackgroundService() async {
+    try {
+      debugPrint('🚀 Starting background notification service...');
+      await _nativeChannel.invokeMethod('startNotificationService');
+      debugPrint('✅ Background service started');
+    } catch (e) {
+      debugPrint('❌ Error starting background service: $e');
+    }
+  }
+
+  static Future<void> stopBackgroundService() async {
+    try {
+      debugPrint('🛑 Stopping background notification service...');
+      await _nativeChannel.invokeMethod('stopNotificationService');
+      debugPrint('✅ Background service stopped');
+    } catch (e) {
+      debugPrint('❌ Error stopping background service: $e');
+    }
+  }
+
+  static Future<void> requestQueuedNotifications() async {
+    try {
+      debugPrint('📬 Requesting queued notifications...');
+      await _nativeChannel.invokeMethod('getQueuedNotifications');
+    } catch (e) {
+      debugPrint('❌ Error requesting queued notifications: $e');
+    }
   }
 
   static Future<bool> isAutoDetectionEnabled() async {
@@ -97,8 +115,10 @@ class NotificationService {
     await prefs.setBool('auto_detect_transactions', enabled);
     if (enabled && !_isListening) {
       await startListening();
+      await startBackgroundService();
     } else if (!enabled && _isListening) {
       await stopListening();
+      await stopBackgroundService();
     }
   }
 
@@ -109,6 +129,8 @@ class NotificationService {
       debugPrint('⚠️ NOTIFICATION: Already listening');
       return;
     }
+
+    _onTransactionDetected = onTransactionDetected;
 
     final isEnabled = await isAutoDetectionEnabled();
     if (!isEnabled) {
@@ -127,6 +149,9 @@ class NotificationService {
 
     debugPrint('🎧 NOTIFICATION: Starting notification listener...');
 
+    await startBackgroundService();
+    await requestQueuedNotifications();
+
     try {
       _notificationSubscription = NotificationListenerService
           .notificationsStream
@@ -134,11 +159,11 @@ class NotificationService {
             (event) async {
               try {
                 final result = await _handleNotification(event);
-                if (result != null && onTransactionDetected != null) {
+                if (result != null && _onTransactionDetected != null) {
                   final transactionMap =
                       result['transactionMap'] as Map<String, Object?>;
                   final hash = result['hash'] as String;
-                  await onTransactionDetected(transactionMap, hash);
+                  await _onTransactionDetected!(transactionMap, hash);
                 }
               } catch (e) {
                 debugPrint('❌ NOTIFICATION: Error processing stream event: $e');
@@ -160,10 +185,82 @@ class NotificationService {
 
     _nativeChannel.setMethodCallHandler((call) async {
       try {
-        debugPrint(
-          '📨 MethodChannel.call.method=${call.method} args=${call.arguments}',
-        );
-        if (call.method == 'onNotificationReceived' ||
+        debugPrint('📨 MethodChannel.call.method=${call.method}');
+
+        if (call.method == 'onTransactionDetected') {
+          // CRITICAL: Direct database insert from native code
+          final args = call.arguments as Map;
+
+          debugPrint('💾 FLUTTER: Received transaction from native code');
+          debugPrint('   Raw data: $args');
+
+          try {
+            final hash = args['hash'] as String;
+
+            final exists = await DatabaseHelper.instance.isDuplicateTransaction(
+              hash,
+            );
+            if (exists) {
+              debugPrint(
+                '⚠️ Transaction already exists in database (hash: $hash)',
+              );
+              return;
+            }
+
+            DateTime transactionDate;
+            if (args['date'] is String) {
+              transactionDate = DateTime.parse(args['date'] as String);
+            } else if (args['timestamp'] is num) {
+              transactionDate = DateTime.fromMillisecondsSinceEpoch(
+                (args['timestamp'] as num).toInt(),
+              );
+            } else {
+              transactionDate = DateTime.now();
+            }
+
+            final transaction = TransactionModel(
+              amount: (args['amount'] as num).toDouble(),
+              type: args['type'] as String,
+              date: transactionDate,
+              note:
+                  args['note'] as String? ?? 'Auto-detected from notification',
+              category: args['category'] as String,
+              icon: (args['icon'] as num).toInt(),
+              autoDetected: true,
+              notificationSource: args['source'] as String?,
+              notificationHash: hash,
+            );
+
+            debugPrint('✅ FLUTTER: Created TransactionModel:');
+            debugPrint('   Amount: ₹${transaction.amount}');
+            debugPrint('   Type: ${transaction.type}');
+            debugPrint('   Date: ${transaction.date}');
+            debugPrint('   Category: ${transaction.category}');
+            debugPrint('   Auto-detected: ${transaction.autoDetected}');
+
+            final transactionMap = transaction.toMap();
+            final id = await DatabaseHelper.instance.insertAutoTransaction(
+              transactionMap,
+            );
+
+            if (id > 0) {
+              debugPrint(
+                '✅✅✅ FLUTTER: Transaction SUCCESSFULLY saved to database (id=$id)',
+              );
+
+              if (_onTransactionDetected != null) {
+                await _onTransactionDetected!(transactionMap, hash);
+              }
+            } else {
+              debugPrint(
+                '❌ FLUTTER: Failed to save transaction (returned id=$id)',
+              );
+            }
+          } catch (e, stackTrace) {
+            debugPrint('❌ FLUTTER: Error saving transaction: $e');
+            debugPrint('Stack trace: $stackTrace');
+          }
+        } else if (call.method == 'onNotificationReceived' ||
             call.method == 'notification') {
           final args = call.arguments;
           Map<String, Object?> mapArgs = {};
@@ -174,7 +271,7 @@ class NotificationService {
             });
           }
 
-          debugPrint('📨 MethodChannel event received: $mapArgs');
+          debugPrint('📨 MethodChannel notification received: $mapArgs');
 
           final event = {
             'package': mapArgs['package'] ?? mapArgs['packageName'] ?? '',
@@ -184,20 +281,108 @@ class NotificationService {
           };
 
           final result = await _handleNotification(event);
-          if (result != null && onTransactionDetected != null) {
+          if (result != null && _onTransactionDetected != null) {
             final transactionMap =
                 result['transactionMap'] as Map<String, Object?>;
             final hash = result['hash'] as String;
-            await onTransactionDetected(transactionMap, hash);
+            await _onTransactionDetected!(transactionMap, hash);
+          }
+        } else if (call.method == 'onDuplicateResponse') {
+          final args = call.arguments as Map;
+          final hash = args['hash'] as String;
+          final shouldAdd = args['shouldAdd'] as bool;
+
+          debugPrint('📨 Duplicate response: hash=$hash, shouldAdd=$shouldAdd');
+
+          if (shouldAdd) {
+            final pendingData = await DatabaseHelper.instance
+                .getPendingTransaction(hash);
+
+            if (pendingData != null) {
+              debugPrint('📦 Found pending transaction data: $pendingData');
+
+              final exists = await DatabaseHelper.instance
+                  .isDuplicateTransaction(hash);
+              if (exists) {
+                debugPrint('⚠️ Transaction already exists, skipping');
+                await DatabaseHelper.instance.removePendingTransaction(hash);
+                return;
+              }
+
+              DateTime transactionDate;
+              if (pendingData['date'] is String) {
+                transactionDate = DateTime.parse(pendingData['date'] as String);
+              } else if (pendingData['timestamp'] is num) {
+                transactionDate = DateTime.fromMillisecondsSinceEpoch(
+                  (pendingData['timestamp'] as num).toInt(),
+                );
+              } else {
+                transactionDate = DateTime.now();
+              }
+
+              final transaction = TransactionModel(
+                amount: (pendingData['amount'] as num).toDouble(),
+                type: pendingData['type'] as String,
+                date: transactionDate,
+                note:
+                    pendingData['note'] as String? ??
+                    'Auto-detected from notification',
+                category: pendingData['category'] as String,
+                icon: (pendingData['icon'] as num).toInt(),
+                autoDetected: true,
+                notificationSource: pendingData['source'] as String?,
+                notificationHash: hash,
+              );
+
+              debugPrint('✅ Created TransactionModel from pending:');
+              debugPrint('   Amount: ₹${transaction.amount}');
+              debugPrint('   Type: ${transaction.type}');
+              debugPrint('   Date: ${transaction.date}');
+
+              final transactionMap = transaction.toMap();
+              final id = await DatabaseHelper.instance.insertAutoTransaction(
+                transactionMap,
+              );
+
+              if (id > 0) {
+                debugPrint(
+                  '✅✅✅ DUPLICATE CONFIRMED: Transaction saved (id=$id)',
+                );
+
+                await NotificationHelper.showTransactionAdded(
+                  amount: transaction.amount,
+                  type: transaction.type,
+                  category: transaction.category,
+                );
+
+                if (_onTransactionDetected != null) {
+                  await _onTransactionDetected!(transactionMap, hash);
+                }
+              } else {
+                debugPrint('❌ Failed to save confirmed duplicate transaction');
+              }
+
+              await DatabaseHelper.instance.removePendingTransaction(hash);
+            } else {
+              debugPrint('⚠️ No pending transaction found for hash: $hash');
+            }
+          } else {
+            await DatabaseHelper.instance.removePendingTransaction(hash);
+            debugPrint(
+              '❌ User declined duplicate - removed pending transaction',
+            );
           }
         }
-      } catch (e) {
+      } catch (e, stackTrace) {
         debugPrint('❌ NOTIFICATION: Error handling MethodChannel call: $e');
+        debugPrint('Stack trace: $stackTrace');
       }
     });
 
     _isListening = true;
-    debugPrint('✅ NOTIFICATION: Listener started (stream + MethodChannel)');
+    debugPrint(
+      '✅ NOTIFICATION: Listener started with proper TransactionModel formatting',
+    );
   }
 
   static Future<void> stopListening() async {
@@ -206,7 +391,9 @@ class NotificationService {
       await _notificationSubscription?.cancel();
       _notificationSubscription = null;
       _nativeChannel.setMethodCallHandler(null);
+      await stopBackgroundService();
       _isListening = false;
+      _onTransactionDetected = null;
       debugPrint('🛑 NOTIFICATION: Listener stopped');
     } catch (e) {
       debugPrint('❌ NOTIFICATION: Error stopping listener: $e');
@@ -220,7 +407,6 @@ class NotificationService {
       String packageName = '';
       String title = '';
       String content = '';
-      final timestamp = DateTime.now();
 
       if (event is Map) {
         packageName =
@@ -248,7 +434,6 @@ class NotificationService {
 
       debugPrint('📬 NOTIFICATION: $packageName | $title | $content');
 
-      // CRITICAL FIX 0: Check if this exact notification was just processed
       final notificationKey = '$packageName|$title|$content';
       if (_recentlyProcessed.contains(notificationKey)) {
         debugPrint(
@@ -257,14 +442,12 @@ class NotificationService {
         return null;
       }
 
-      // CRITICAL FIX 1: Ignore your own app's notifications
       if (packageName == 'com.example.buddy' ||
           packageName.contains('example.buddy')) {
         debugPrint('   🚫 Skipping own app notification');
         return null;
       }
 
-      // CRITICAL FIX 2: Ignore duplicate/confirmation related notifications by content
       final lowerTitle = title.toLowerCase();
       final lowerContent = content.toLowerCase();
 
@@ -272,22 +455,15 @@ class NotificationService {
           lowerContent.contains('duplicate') ||
           lowerTitle.contains('transaction added') ||
           lowerContent.contains('transaction added') ||
-          lowerTitle.contains('tap here to add') ||
-          lowerTitle.contains('tap here to ignore') ||
           lowerTitle.contains('possible duplicate') ||
-          lowerContent.contains('similar in last') ||
-          lowerContent.contains('found 1 similar') ||
-          lowerContent.contains('found 2 similar') ||
-          lowerContent.contains('found 3 similar') ||
-          lowerContent.contains('similar transaction')) {
+          lowerContent.contains('similar transaction') ||
+          lowerTitle.contains('monitoring financial') ||
+          lowerContent.contains('expense tracker')) {
         debugPrint('   🚫 Skipping duplicate/confirmation notification');
         return null;
       }
 
-      // Mark this notification as recently processed
       _recentlyProcessed.add(notificationKey);
-
-      // Clean up old entries after 5 seconds
       Future.delayed(const Duration(seconds: 5), () {
         _recentlyProcessed.remove(notificationKey);
       });
@@ -303,86 +479,74 @@ class NotificationService {
         return null;
       }
 
-      final hash = _generateHash(fullText, timestamp);
+      final hash = _generateHash(fullText, DateTime.now());
 
-      // CRITICAL: Check if this EXACT notification was already processed
-      // This check happens BEFORE checking for similar transactions
       final isDuplicateHash = await DatabaseHelper.instance
           .isDuplicateTransaction(hash);
       if (isDuplicateHash) {
         debugPrint(
-          '   ⚠️ Exact duplicate notification (same hash) - already processed, skipping',
+          '   ⚠️ Exact duplicate notification - already processed, skipping',
         );
         return null;
       }
 
-      // Also check if we have a pending transaction with this hash
       final pendingExists = await DatabaseHelper.instance.getPendingTransaction(
         hash,
       );
       if (pendingExists != null) {
-        debugPrint(
-          '   ⚠️ Pending transaction already exists with this hash - skipping',
-        );
+        debugPrint('   ⚠️ Pending transaction already exists - skipping');
         return null;
       }
 
-      // Check for similar transactions (same amount and type) in last 24 hours
+      final transactionDate = DateTime.now();
+
+      final transaction = TransactionModel(
+        amount: txnData['amount'] as double,
+        type: txnData['type'] as String,
+        date: transactionDate,
+        note: txnData['note'] as String,
+        category: txnData['category'] as String,
+        icon: txnData['icon'] as int,
+        autoDetected: true,
+        notificationSource: packageName,
+        notificationHash: hash,
+      );
+
+      final transactionMap = transaction.toMap();
+
       final similarTransactions = await DatabaseHelper.instance
           .findSimilarTransactions(
-            amount: txnData['amount'] as double,
-            type: txnData['type'] as String,
+            amount: transaction.amount,
+            type: transaction.type,
             hoursWindow: 24,
           );
 
-      final transactionMap = <String, Object?>{
-        'amount': txnData['amount'],
-        'type': txnData['type'],
-        'date': timestamp.toIso8601String(),
-        'note': txnData['note'],
-        'category': txnData['category'],
-        'icon': txnData['icon'],
-        'auto_detected': 1,
-        'notification_source': packageName,
-        'notification_hash': hash,
-      };
-
-      // If similar transactions exist, ALWAYS ask for confirmation
       if (similarTransactions.isNotEmpty) {
         debugPrint(
           '   ⚠️ Found ${similarTransactions.length} similar transaction(s) in last 24h',
         );
-        for (var similar in similarTransactions) {
-          debugPrint(
-            '   Previous: ₹${similar['amount']} on ${similar['date']}',
-          );
-        }
 
-        // Store as pending and ask user
         await DatabaseHelper.instance.storePendingTransaction(
           hash,
           transactionMap,
         );
 
-        // Show confirmation notification
         await NotificationHelper.showDuplicateConfirmation(
           transactionHash: hash,
-          amount: txnData['amount'] as double,
-          type: txnData['type'] as String,
-          category: txnData['category'] as String,
+          amount: transaction.amount,
+          type: transaction.type,
+          category: transaction.category,
           similarCount: similarTransactions.length,
         );
 
         debugPrint('   📬 Waiting for user confirmation...');
-        return null; // Don't add yet, waiting for user action
+        return null;
       }
 
-      // No similar transaction - add directly without asking
-      // But first check if this hash already exists (extra safety)
       final alreadyExists = await DatabaseHelper.instance
           .isDuplicateTransaction(hash);
       if (alreadyExists) {
-        debugPrint('⚠️ Transaction with this hash already exists - skipping');
+        debugPrint('⚠️ Transaction already exists - skipping');
         return null;
       }
 
@@ -392,9 +556,9 @@ class NotificationService {
       if (id > 0) {
         debugPrint('✅ NOTIFICATION: Auto-transaction inserted (id=$id)');
         await NotificationHelper.showTransactionAdded(
-          amount: txnData['amount'] as double,
-          type: txnData['type'] as String,
-          category: txnData['category'] as String,
+          amount: transaction.amount,
+          type: transaction.type,
+          category: transaction.category,
         );
         return {'transactionMap': transactionMap, 'hash': hash};
       } else {
@@ -410,7 +574,6 @@ class NotificationService {
   static bool _isFromFinancialApp(String packageName) {
     if (packageName.isEmpty) return true;
 
-    // CRITICAL: Ignore notifications from your own app!
     if (packageName == 'com.example.buddy' ||
         packageName.contains('example.buddy')) {
       return false;
@@ -436,7 +599,6 @@ class NotificationService {
     return false;
   }
 
-  // FIXED: Correct GPay logic - "paid you" = credit, "you paid" = debit
   static Map<String, dynamic>? _parseTransaction(String text, String source) {
     debugPrint('🔍 PARSING: "$text"');
 
@@ -444,50 +606,35 @@ class NotificationService {
     bool isDebit = false;
     bool isCredit = false;
 
-    // === CRITICAL LOGIC FOR GPAY & UPI APPS ===
-    // GPay format: "[Name] paid you ₹X" = CREDIT (money IN)
-    // GPay format: "You paid [Name] ₹X" = DEBIT (money OUT)
-
-    // Check for "paid you" pattern (CREDIT - money received)
     if (lowerText.contains('paid you') ||
         lowerText.contains('sent you') ||
         lowerText.contains('transferred you') ||
         lowerText.contains('received from')) {
       isCredit = true;
       debugPrint('   💰 Pattern: Someone paid YOU → CREDIT');
-    }
-    // Check for "you paid" or "you sent" pattern (DEBIT - money sent)
-    else if (lowerText.contains('you paid') ||
+    } else if (lowerText.contains('you paid') ||
         lowerText.contains('you sent') ||
         lowerText.contains('you transferred') ||
         lowerText.contains('paid to') ||
         lowerText.contains('payment to')) {
       isDebit = true;
       debugPrint('   💸 Pattern: YOU paid someone → DEBIT');
-    }
-    // Bank SMS patterns (money debited FROM your account = DEBIT)
-    else if (lowerText.contains('debited from your') ||
+    } else if (lowerText.contains('debited from your') ||
         lowerText.contains('withdrawn from your') ||
         lowerText.contains('deducted from your')) {
       isDebit = true;
       debugPrint('   💸 Pattern: Debited FROM your account → DEBIT');
-    }
-    // Bank SMS patterns (money credited TO your account = CREDIT)
-    else if (lowerText.contains('credited to your') ||
+    } else if (lowerText.contains('credited to your') ||
         lowerText.contains('deposited to your') ||
         lowerText.contains('added to your')) {
       isCredit = true;
       debugPrint('   💰 Pattern: Credited TO your account → CREDIT');
-    }
-    // Refund/Cashback patterns (always CREDIT)
-    else if (lowerText.contains('refund') ||
+    } else if (lowerText.contains('refund') ||
         lowerText.contains('cashback') ||
         lowerText.contains('reward')) {
       isCredit = true;
       debugPrint('   💰 Pattern: Refund/Cashback → CREDIT');
-    }
-    // Generic fallback patterns
-    else {
+    } else {
       final hasDebitKeyword = _debitRegex.hasMatch(text);
       final hasCreditKeyword = _creditRegex.hasMatch(text);
 
@@ -498,7 +645,6 @@ class NotificationService {
         isCredit = true;
         debugPrint('   💰 Fallback: Credit keyword found → CREDIT');
       } else if (hasDebitKeyword && hasCreditKeyword) {
-        // When both present, prefer debit (safer assumption for expenses)
         isDebit = true;
         debugPrint('   ⚠️ Both keywords found, defaulting to DEBIT');
       }
@@ -603,34 +749,8 @@ class NotificationService {
   }
 
   static String _generateHash(String text, DateTime timestamp) {
-    // Use only the text for hash, not timestamp
-    // This way the same notification won't create different hashes
     final bytes = utf8.encode(text);
     final digest = sha256.convert(bytes);
     return digest.toString();
-  }
-
-  static Future<void> testNotificationParsing(String testMessage) async {
-    debugPrint('🧪 TEST PARSING: $testMessage');
-    final result = _parseTransaction(testMessage, 'com.test.app');
-    if (result != null) {
-      debugPrint(
-        '   ✅ Parsed: amount=${result['amount']} type=${result['type']}',
-      );
-    } else {
-      debugPrint('   ❌ Not parsed');
-    }
-  }
-
-  static Future<Map<String, dynamic>> getDebugInfo() async {
-    final isGranted = await NotificationListenerService.isPermissionGranted();
-    final isEnabled = await isAutoDetectionEnabled();
-    return {
-      'is_listening': _isListening,
-      'permission_granted': isGranted,
-      'auto_detection_enabled': isEnabled,
-      'monitored_apps_count': _financialApps.length,
-      'monitored_apps': _financialApps,
-    };
   }
 }

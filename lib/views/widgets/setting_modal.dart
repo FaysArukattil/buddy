@@ -28,12 +28,12 @@ class _SettingsModalState extends State<SettingsModal> {
   Future<void> _loadSettings() async {
     try {
       final enabled = await NotificationService.isAutoDetectionEnabled();
-      final info = await NotificationService.getDebugInfo();
+      // final info = await NotificationService.getDebugInfo();
 
       if (mounted) {
         setState(() {
           _autoDetectionEnabled = enabled;
-          _debugInfo = info;
+          // _debugInfo = info;
           _isLoading = false;
         });
       }

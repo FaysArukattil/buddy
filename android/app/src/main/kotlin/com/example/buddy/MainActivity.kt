@@ -5,12 +5,14 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import android.content.Intent
 import android.util.Log
+import android.os.Build
 
 class MainActivity : FlutterActivity() {
 
     companion object {
         var instance: MainActivity? = null
         private const val CHANNEL = "notification_channel"
+        private const val TAG = "MainActivity"
     }
 
     private lateinit var channel: MethodChannel
@@ -19,7 +21,6 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         instance = this
 
-        // Create the MethodChannel for Flutter <-> Android communication
         channel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             CHANNEL
@@ -28,34 +29,113 @@ class MainActivity : FlutterActivity() {
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "startNotificationService" -> {
-                    Log.d("MainActivity", "Starting NotificationListener service...")
-                    startService(Intent(this, NotificationListener::class.java))
+                    Log.d(TAG, "📡 Starting NotificationListener service...")
+                    startNotificationListenerService()
+                    result.success(true)
+                }
+                "stopNotificationService" -> {
+                    Log.d(TAG, "🛑 Stopping NotificationListener service...")
+                    stopNotificationListenerService()
+                    result.success(true)
+                }
+                "getQueuedNotifications" -> {
+                    Log.d(TAG, "📬 Requesting queued notifications...")
+                    broadcastProcessQueue()
                     result.success(true)
                 }
                 else -> result.notImplemented()
             }
         }
 
-        Log.d("MainActivity", "✅ MethodChannel '$CHANNEL' ready")
+        Log.d(TAG, "✅ MethodChannel '$CHANNEL' ready")
+        
+        broadcastProcessQueue()
     }
 
-    // Called by NotificationListener.kt
+    private fun startNotificationListenerService() {
+        try {
+            val serviceIntent = Intent(this, NotificationListener::class.java)
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+            
+            Log.d(TAG, "✅ NotificationListener service started")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error starting service: ${e.message}", e)
+        }
+    }
+
+    private fun stopNotificationListenerService() {
+        try {
+            val serviceIntent = Intent(this, NotificationListener::class.java)
+            stopService(serviceIntent)
+            Log.d(TAG, "✅ NotificationListener service stopped")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error stopping service: ${e.message}", e)
+        }
+    }
+
+    private fun broadcastProcessQueue() {
+        Log.d(TAG, "📮 Ready to process queued notifications")
+    }
+
     fun sendNotificationToFlutter(packageName: String, title: String, content: String) {
-        Log.d("MainActivity", "📤 Sending notification to Flutter: $title -> $content")
+        Log.d(TAG, "📤 Sending notification to Flutter: $packageName | $title")
         try {
             val map = mapOf(
                 "package" to packageName,
+                "packageName" to packageName,
                 "title" to title,
-                "content" to content
+                "content" to content,
+                "text" to content,
+                "body" to content
             )
             channel.invokeMethod("onNotificationReceived", map)
+            Log.d(TAG, "✅ Notification sent to Flutter successfully")
         } catch (e: Exception) {
-            Log.e("MainActivity", "❌ Error sending notification to Flutter: ${e.message}", e)
+            Log.e(TAG, "❌ Error sending notification to Flutter: ${e.message}", e)
         }
+    }
+
+    fun saveTransactionToDatabase(transactionData: Map<String, Any>) {
+        Log.d(TAG, "💾 Saving transaction to database via Flutter")
+        Log.d(TAG, "   Data: $transactionData")
+        
+        try {
+            channel.invokeMethod("onTransactionDetected", transactionData)
+            Log.d(TAG, "✅ Transaction sent to Flutter for database insert")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error sending transaction to Flutter: ${e.message}", e)
+        }
+    }
+
+    fun handleDuplicateResponse(hash: String, shouldAdd: Boolean) {
+        Log.d(TAG, "📨 Handling duplicate response: hash=$hash, shouldAdd=$shouldAdd")
+        
+        try {
+            val responseData = mapOf(
+                "hash" to hash,
+                "shouldAdd" to shouldAdd
+            )
+            
+            channel.invokeMethod("onDuplicateResponse", responseData)
+            Log.d(TAG, "✅ Response sent to Flutter")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error sending response to Flutter: ${e.message}", e)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Log.d(TAG, "📱 MainActivity resumed - processing queued notifications")
     }
 
     override fun onDestroy() {
         instance = null
+        Log.d(TAG, "🛑 MainActivity destroyed")
         super.onDestroy()
     }
 }
