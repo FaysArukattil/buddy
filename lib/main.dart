@@ -6,6 +6,7 @@ import 'package:buddy/services/notification_service.dart';
 import 'package:buddy/services/notification_helper.dart';
 import 'package:buddy/services/db_helper.dart';
 import 'package:buddy/services/transaction_sync_helper.dart';
+import 'package:buddy/services/app_init_helper.dart'; // 👈 new helper
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,7 +21,15 @@ void main() async {
     debugPrint('❌ APP: Database initialization failed: $e');
   }
 
-  // 2. Sync native transactions to Flutter database
+  // 2. Initialize the app sync helper (auto-sync & callbacks)
+  try {
+    await AppInitHelper.initialize();
+    debugPrint('✅ APP: AppInitHelper initialized');
+  } catch (e) {
+    debugPrint('⚠️ APP: AppInitHelper initialization failed: $e');
+  }
+
+  // 3. Sync native transactions to Flutter database
   try {
     await TransactionSyncHelper.syncNativeTransactions();
     final unsyncedCount = await TransactionSyncHelper.getUnsyncedCount();
@@ -33,7 +42,7 @@ void main() async {
     debugPrint('⚠️ APP: Transaction sync failed: $e');
   }
 
-  // 3. Initialize Notification Helper (for showing notifications)
+  // 4. Initialize Notification Helper (for showing notifications)
   try {
     await NotificationHelper.initialize();
     debugPrint('✅ APP: Notification helper initialized');
@@ -41,7 +50,7 @@ void main() async {
     debugPrint('❌ APP: Notification helper initialization failed: $e');
   }
 
-  // 4. Request notification permissions
+  // 5. Request notification permissions
   try {
     await NotificationHelper.requestNotificationPermission();
     debugPrint('✅ APP: Notification permissions requested');
@@ -49,7 +58,7 @@ void main() async {
     debugPrint('⚠️ APP: Notification permission request failed: $e');
   }
 
-  // 5. Check if auto-detection is enabled
+  // 6. Check if auto-detection is enabled
   try {
     final isAutoDetectionEnabled =
         await NotificationService.isAutoDetectionEnabled();
@@ -91,11 +100,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     debugPrint('📱 APP: Observer attached');
+
+    // 👇 Refresh UI or sync when transactions are updated
+    AppInitHelper.onTransactionsSynced = () {
+      debugPrint('🔄 Transactions synced - triggering refresh if needed');
+      // Optionally trigger rebuild or data reload
+      setState(() {});
+    };
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    AppInitHelper.dispose();
     debugPrint('📱 APP: Observer removed');
     super.dispose();
   }
@@ -103,10 +120,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-
     debugPrint('📱 APP: Lifecycle state changed to: $state');
 
-    // Sync when app comes to foreground
     if (state == AppLifecycleState.resumed) {
       debugPrint('📱 APP: App resumed - syncing transactions...');
       _syncTransactions();
@@ -115,14 +130,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _syncTransactions() async {
     try {
-      await TransactionSyncHelper.syncNativeTransactions();
-      final unsyncedCount = await TransactionSyncHelper.getUnsyncedCount();
-
-      if (unsyncedCount == 0) {
-        debugPrint('✅ APP: All transactions synced successfully');
-      } else {
-        debugPrint('⚠️ APP: Still have $unsyncedCount unsynced transactions');
-      }
+      final syncedCount = await AppInitHelper.syncNow(); // 👈 unified sync call
+      debugPrint('✅ APP: Synced $syncedCount transactions');
     } catch (e) {
       debugPrint('❌ APP: Error during sync: $e');
     }

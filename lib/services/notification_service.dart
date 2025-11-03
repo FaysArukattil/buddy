@@ -105,6 +105,19 @@ class NotificationService {
     }
   }
 
+  // NEW: Request sync of unsynced transactions from native code
+  static Future<void> syncUnsyncedTransactions() async {
+    try {
+      debugPrint(
+        '🔄 NOTIFICATION: Requesting sync of unsynced transactions...',
+      );
+      await _nativeChannel.invokeMethod('syncUnsyncedTransactions');
+      debugPrint('✅ NOTIFICATION: Sync request sent');
+    } catch (e) {
+      debugPrint('❌ NOTIFICATION: Error requesting sync: $e');
+    }
+  }
+
   static Future<bool> isAutoDetectionEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool('auto_detect_transactions') ?? true;
@@ -151,6 +164,9 @@ class NotificationService {
 
     await startBackgroundService();
     await requestQueuedNotifications();
+
+    // NEW: Request sync of any unsynced transactions
+    await syncUnsyncedTransactions();
 
     try {
       _notificationSubscription = NotificationListenerService

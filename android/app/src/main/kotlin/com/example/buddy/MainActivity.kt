@@ -6,6 +6,8 @@ import io.flutter.plugin.common.MethodChannel
 import android.content.Intent
 import android.util.Log
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 
 class MainActivity : FlutterActivity() {
 
@@ -43,13 +45,22 @@ class MainActivity : FlutterActivity() {
                     broadcastProcessQueue()
                     result.success(true)
                 }
+                "syncUnsyncedTransactions" -> {
+                    Log.d(TAG, "🔄 Flutter requested unsynced transaction sync...")
+                    requestUnsyncedTransactionSync()
+                    result.success(true)
+                }
                 else -> result.notImplemented()
             }
         }
 
         Log.d(TAG, "✅ MethodChannel '$CHANNEL' ready")
         
-        broadcastProcessQueue()
+        // Give Flutter a moment to initialize, then sync unsynced transactions
+        Handler(Looper.getMainLooper()).postDelayed({
+            broadcastProcessQueue()
+            requestUnsyncedTransactionSync()
+        }, 1000)
     }
 
     private fun startNotificationListenerService() {
@@ -63,6 +74,11 @@ class MainActivity : FlutterActivity() {
             }
             
             Log.d(TAG, "✅ NotificationListener service started")
+            
+            // Request sync after starting service
+            Handler(Looper.getMainLooper()).postDelayed({
+                requestUnsyncedTransactionSync()
+            }, 500)
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error starting service: ${e.message}", e)
         }
@@ -80,6 +96,20 @@ class MainActivity : FlutterActivity() {
 
     private fun broadcastProcessQueue() {
         Log.d(TAG, "📮 Ready to process queued notifications")
+    }
+
+    private fun requestUnsyncedTransactionSync() {
+        Log.d(TAG, "🔄 Requesting unsynced transaction sync from service...")
+        
+        try {
+            // Send broadcast to NotificationListener to trigger sync
+            val syncIntent = Intent("com.example.buddy.SYNC_UNSYNCED_TRANSACTIONS")
+            sendBroadcast(syncIntent)
+            
+            Log.d(TAG, "✅ Sync request broadcast sent")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error requesting sync: ${e.message}", e)
+        }
     }
 
     fun sendNotificationToFlutter(packageName: String, title: String, content: String) {
@@ -131,6 +161,11 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         Log.d(TAG, "📱 MainActivity resumed - processing queued notifications")
+        
+        // Sync unsynced transactions when app resumes
+        Handler(Looper.getMainLooper()).postDelayed({
+            requestUnsyncedTransactionSync()
+        }, 500)
     }
 
     override fun onDestroy() {

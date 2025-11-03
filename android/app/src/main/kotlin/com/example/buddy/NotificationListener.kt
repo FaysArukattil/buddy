@@ -23,6 +23,8 @@ class NotificationListener : NotificationListenerService() {
         private const val CHANNEL_ID = "notification_listener_channel"
         private const val QUEUE_FILE = "notification_queue.json"
         private const val PREFS_NAME = "buddy_prefs"
+        // NEW: Separate file for unsynced transactions
+        private const val UNSYNCED_TRANSACTIONS_FILE = "unsynced_transactions.json"
         
         private val FINANCIAL_APPS = setOf(
             "com.google.android.apps.messaging",
@@ -64,6 +66,9 @@ class NotificationListener : NotificationListenerService() {
         loadQueueFromDisk()
         startForegroundService()
         
+        // NEW: Sync any unsynced transactions when service starts
+        syncUnsyncedTransactionsToFlutter()
+        
         Log.d(TAG, "✅ Service initialized and running in foreground")
     }
 
@@ -74,6 +79,9 @@ class NotificationListener : NotificationListenerService() {
             startForegroundService()
             isServiceRunning = true
         }
+        
+        // NEW: Try to sync unsynced transactions
+        syncUnsyncedTransactionsToFlutter()
         
         return START_STICKY
     }
@@ -86,6 +94,9 @@ class NotificationListener : NotificationListenerService() {
         isServiceRunning = true
         startForegroundService()
         processQueuedNotifications()
+        
+        // NEW: Sync any pending transactions
+        syncUnsyncedTransactionsToFlutter()
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -146,11 +157,9 @@ class NotificationListener : NotificationListenerService() {
             val fullText = "$title $content"
             val notificationKey = "$pkg|$title|$content"
             
-            // Generate unique hash with timestamp
             val timestampedText = "$fullText|${System.currentTimeMillis()}"
             val hash = generateHash(timestampedText)
             
-            // Prevent duplicate processing within 10 seconds
             if (recentlyProcessed.contains(notificationKey)) {
                 Log.d(TAG, "   🚫 Already processed recently (same notification)")
                 return
@@ -169,33 +178,38 @@ class NotificationListener : NotificationListenerService() {
             
             Log.d(TAG, "   💰 Parsed: ₹${transaction.amount} ${transaction.type}")
             
-            // Check for similar transactions FIRST
             val similarCount = countSimilarTransactions(transaction.amount, transaction.type)
             
             if (similarCount > 0) {
                 Log.d(TAG, "   ⚠️ Found $similarCount similar transaction(s) in last 24 hours")
-                
-                // Store as pending and show confirmation
                 storePendingTransaction(hash, transaction, pkg)
                 showDuplicateConfirmationNotification(hash, transaction, similarCount)
-                
                 Log.d(TAG, "   📬 Waiting for user confirmation...")
                 return
             }
             
-            // Check if exact hash exists
             if (isDuplicateTransaction(hash)) {
                 Log.d(TAG, "   ⚠️ Exact duplicate hash detected - already processed")
                 return
             }
             
-            // NEW transaction - save to SharedPreferences AND notify Flutter
+            // NEW: Save to both SharedPreferences AND unsynced file
             Log.d(TAG, "   ✅ No similar transactions - saving directly")
             val saved = saveTransaction(hash, transaction, pkg)
             
             if (saved) {
-                // CRITICAL: Send to Flutter immediately for database insert
-                notifyFlutterOfNewTransaction(hash, transaction, pkg)
+                // Save to unsynced file for later sync
+                saveUnsyncedTransaction(hash, transaction, pkg)
+                
+                // Try to notify Flutter if app is running
+                val flutterNotified = notifyFlutterOfNewTransaction(hash, transaction, pkg)
+                
+                if (flutterNotified) {
+                    Log.d(TAG, "✅ Transaction synced to Flutter immediately")
+                } else {
+                    Log.d(TAG, "⏳ Transaction saved to unsynced queue - will sync when app opens")
+                }
+                
                 showTransactionAddedNotification(transaction)
             } else {
                 Log.e(TAG, "   ❌ Failed to save transaction")
@@ -203,6 +217,119 @@ class NotificationListener : NotificationListenerService() {
             
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error in native processing: ${e.message}", e)
+        }
+    }
+
+    // NEW: Save transaction to unsynced file
+    private fun saveUnsyncedTransaction(hash: String, transaction: Transaction, source: String) {
+        try {
+            val file = File(applicationContext.filesDir, UNSYNCED_TRANSACTIONS_FILE)
+            
+            // Load existing unsynced transactions
+            val unsyncedArray = if (file.exists()) {
+                org.json.JSONArray(file.readText())
+            } else {
+                org.json.JSONArray()
+            }
+            
+            // Add new transaction
+            val isoDate = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }.format(Date())
+            
+            val transactionJson = JSONObject().apply {
+                put("hash", hash)
+                put("amount", transaction.amount)
+                put("type", transaction.type)
+                put("category", transaction.category)
+                put("icon", transaction.icon)
+                put("note", "Auto-detected: ${transaction.note}")
+                put("source", source)
+                put("timestamp", System.currentTimeMillis())
+                put("date", isoDate)
+            }
+            
+            unsyncedArray.put(transactionJson)
+            
+            // Save back to file
+            file.writeText(unsyncedArray.toString())
+            
+            Log.d(TAG, "💾 Saved to unsynced file (total unsynced: ${unsyncedArray.length()})")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error saving unsynced transaction: ${e.message}", e)
+        }
+    }
+
+    // NEW: Sync unsynced transactions to Flutter when app is available
+    private fun syncUnsyncedTransactionsToFlutter() {
+        try {
+            val file = File(applicationContext.filesDir, UNSYNCED_TRANSACTIONS_FILE)
+            
+            if (!file.exists() || MainActivity.instance == null) {
+                return
+            }
+            
+            val unsyncedArray = org.json.JSONArray(file.readText())
+            
+            if (unsyncedArray.length() == 0) {
+                Log.d(TAG, "📭 No unsynced transactions to sync")
+                return
+            }
+            
+            Log.d(TAG, "🔄 Syncing ${unsyncedArray.length()} unsynced transactions to Flutter...")
+            
+            val syncedHashes = mutableListOf<String>()
+            
+            for (i in 0 until unsyncedArray.length()) {
+                try {
+                    val json = unsyncedArray.getJSONObject(i)
+                    val hash = json.getString("hash")
+                    
+                    val transactionData = mapOf(
+                        "hash" to hash,
+                        "amount" to json.getDouble("amount"),
+                        "type" to json.getString("type"),
+                        "category" to json.getString("category"),
+                        "icon" to json.getInt("icon"),
+                        "note" to json.getString("note"),
+                        "source" to json.getString("source"),
+                        "timestamp" to json.getLong("timestamp"),
+                        "date" to json.getString("date")
+                    )
+                    
+                    MainActivity.instance?.saveTransactionToDatabase(transactionData)
+                    syncedHashes.add(hash)
+                    
+                    Log.d(TAG, "   ✅ Synced transaction $hash")
+                    
+                    // Small delay between syncs to avoid overwhelming Flutter
+                    Thread.sleep(100)
+                } catch (e: Exception) {
+                    Log.e(TAG, "   ❌ Error syncing transaction $i: ${e.message}")
+                }
+            }
+            
+            // Remove synced transactions from file
+            if (syncedHashes.isNotEmpty()) {
+                val remainingArray = org.json.JSONArray()
+                for (i in 0 until unsyncedArray.length()) {
+                    val json = unsyncedArray.getJSONObject(i)
+                    if (!syncedHashes.contains(json.getString("hash"))) {
+                        remainingArray.put(json)
+                    }
+                }
+                
+                if (remainingArray.length() > 0) {
+                    file.writeText(remainingArray.toString())
+                } else {
+                    file.delete()
+                }
+                
+                Log.d(TAG, "✅ Synced ${syncedHashes.size} transactions. Remaining: ${remainingArray.length()}")
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error syncing unsynced transactions: ${e.message}", e)
         }
     }
 
@@ -380,10 +507,15 @@ class NotificationListener : NotificationListenerService() {
         Log.d(TAG, "💾 Pending transaction stored: $hash")
     }
 
-    private fun notifyFlutterOfNewTransaction(hash: String, transaction: Transaction, source: String) {
-        Log.d(TAG, "📤 Notifying Flutter of new transaction: $hash")
+    private fun notifyFlutterOfNewTransaction(hash: String, transaction: Transaction, source: String): Boolean {
+        Log.d(TAG, "📤 Attempting to notify Flutter of new transaction: $hash")
         
-        try {
+        return try {
+            if (MainActivity.instance == null) {
+                Log.d(TAG, "⚠️ MainActivity not available - transaction will sync later")
+                return false
+            }
+            
             val isoDate = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
                 timeZone = TimeZone.getTimeZone("UTC")
             }.format(Date())
@@ -400,17 +532,13 @@ class NotificationListener : NotificationListenerService() {
                 "date" to isoDate
             )
             
-            Log.d(TAG, "📦 Transaction data prepared:")
-            Log.d(TAG, "   Amount: ${transaction.amount}")
-            Log.d(TAG, "   Type: ${transaction.type}")
-            Log.d(TAG, "   Date: $isoDate")
-            Log.d(TAG, "   Category: ${transaction.category}")
-            
             MainActivity.instance?.saveTransactionToDatabase(transactionData)
             
             Log.d(TAG, "✅ Flutter notified successfully")
+            true
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error notifying Flutter: ${e.message}", e)
+            false
         }
     }
 
