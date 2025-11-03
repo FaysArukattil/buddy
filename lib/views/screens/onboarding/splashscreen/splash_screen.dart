@@ -14,31 +14,50 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
   @override
   void initState() {
     super.initState();
-    checklogin();
+
+    _controller = AnimationController(vsync: this);
+    _controller.addStatusListener((status) async {
+      if (status == AnimationStatus.completed) {
+        await navigateToNext();
+      }
+    });
   }
 
-  Future<void> checklogin() async {
+  Future<void> navigateToNext() async {
     final pref = await SharedPreferences.getInstance();
-    await Future.delayed(const Duration(seconds: 3));
+    final isloggedin = pref.getBool("is_logged_in") ?? false;
+
+    // Add a slight fade transition for smoothness
+    await Future.delayed(const Duration(milliseconds: 300));
 
     if (!mounted) return;
 
-    final isloggedin = pref.getBool("is_logged_in") ?? false;
-    if (isloggedin) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const BottomNavbarScreen()),
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const OnboardingScreen()),
-      );
-    }
+    final nextPage = isloggedin
+        ? const BottomNavbarScreen()
+        : const OnboardingScreen();
+
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 600),
+        pageBuilder: (_, __, ___) => nextPage,
+        transitionsBuilder: (_, animation, __, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
@@ -50,15 +69,19 @@ class _SplashScreenState extends State<SplashScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Lottie Animation
               Lottie.asset(
                 'assets/lottie/jsonlottie/Coinlottie.json',
+                controller: _controller,
                 width: 250,
                 height: 250,
                 fit: BoxFit.contain,
+                onLoaded: (composition) {
+                  _controller
+                    ..duration = composition.duration
+                    ..forward();
+                },
               ),
               const SizedBox(height: 20),
-              // App Name
               const Text(
                 "Buddy",
                 style: TextStyle(
