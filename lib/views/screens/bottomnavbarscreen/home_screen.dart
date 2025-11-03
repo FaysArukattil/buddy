@@ -327,7 +327,7 @@ class HomeScreenState extends State<HomeScreen>
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => ProfileScreen(),
+                                  builder: (_) => const ProfileScreen(),
                                 ),
                               ).then((_) => _refreshFromDb());
                             },
@@ -340,8 +340,6 @@ class HomeScreenState extends State<HomeScreen>
                         ],
                       ),
 
-                      // Don't forget to add this import at the top of home_screen.dart:
-                      // import 'package:buddy/views/widgets/settings_modal.dart';
                       const SizedBox(height: 20),
 
                       // Balance Card
