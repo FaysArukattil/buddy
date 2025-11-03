@@ -1,8 +1,10 @@
 package com.example.buddy
 
 import android.app.*
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.PowerManager
 import android.service.notification.NotificationListenerService
@@ -23,7 +25,6 @@ class NotificationListener : NotificationListenerService() {
         private const val CHANNEL_ID = "notification_listener_channel"
         private const val QUEUE_FILE = "notification_queue.json"
         private const val PREFS_NAME = "buddy_prefs"
-        // NEW: Separate file for unsynced transactions
         private const val UNSYNCED_TRANSACTIONS_FILE = "unsynced_transactions.json"
         
         private val FINANCIAL_APPS = setOf(
@@ -56,6 +57,7 @@ class NotificationListener : NotificationListenerService() {
     private var notificationQueue: MutableList<NotificationData> = mutableListOf()
     private var wakeLock: PowerManager.WakeLock? = null
     private val recentlyProcessed = mutableSetOf<String>()
+    private var syncReceiver: BroadcastReceiver? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -66,10 +68,36 @@ class NotificationListener : NotificationListenerService() {
         loadQueueFromDisk()
         startForegroundService()
         
-        // NEW: Sync any unsynced transactions when service starts
+        // Register broadcast receiver for sync requests
+        registerSyncBroadcastReceiver()
+        
+        // Sync any unsynced transactions when service starts
         syncUnsyncedTransactionsToFlutter()
         
         Log.d(TAG, "✅ Service initialized and running in foreground")
+    }
+
+    private fun registerSyncBroadcastReceiver() {
+        try {
+            syncReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    Log.d(TAG, "📡 Sync broadcast received")
+                    syncUnsyncedTransactionsToFlutter()
+                }
+            }
+            
+            val filter = IntentFilter("com.example.buddy.SYNC_UNSYNCED_TRANSACTIONS")
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(syncReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                registerReceiver(syncReceiver, filter)
+            }
+            
+            Log.d(TAG, "✅ Sync broadcast receiver registered")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error registering sync receiver: ${e.message}", e)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -80,7 +108,7 @@ class NotificationListener : NotificationListenerService() {
             isServiceRunning = true
         }
         
-        // NEW: Try to sync unsynced transactions
+        // Try to sync unsynced transactions
         syncUnsyncedTransactionsToFlutter()
         
         return START_STICKY
@@ -95,7 +123,7 @@ class NotificationListener : NotificationListenerService() {
         startForegroundService()
         processQueuedNotifications()
         
-        // NEW: Sync any pending transactions
+        // Sync any pending transactions
         syncUnsyncedTransactionsToFlutter()
     }
 
@@ -193,7 +221,6 @@ class NotificationListener : NotificationListenerService() {
                 return
             }
             
-            // NEW: Save to both SharedPreferences AND unsynced file
             Log.d(TAG, "   ✅ No similar transactions - saving directly")
             val saved = saveTransaction(hash, transaction, pkg)
             
@@ -220,7 +247,6 @@ class NotificationListener : NotificationListenerService() {
         }
     }
 
-    // NEW: Save transaction to unsynced file
     private fun saveUnsyncedTransaction(hash: String, transaction: Transaction, source: String) {
         try {
             val file = File(applicationContext.filesDir, UNSYNCED_TRANSACTIONS_FILE)
@@ -230,6 +256,15 @@ class NotificationListener : NotificationListenerService() {
                 org.json.JSONArray(file.readText())
             } else {
                 org.json.JSONArray()
+            }
+            
+            // Check if already exists
+            for (i in 0 until unsyncedArray.length()) {
+                val existing = unsyncedArray.getJSONObject(i)
+                if (existing.getString("hash") == hash) {
+                    Log.d(TAG, "⚠️ Transaction already in unsynced file - skipping")
+                    return
+                }
             }
             
             // Add new transaction
@@ -260,12 +295,17 @@ class NotificationListener : NotificationListenerService() {
         }
     }
 
-    // NEW: Sync unsynced transactions to Flutter when app is available
     private fun syncUnsyncedTransactionsToFlutter() {
         try {
             val file = File(applicationContext.filesDir, UNSYNCED_TRANSACTIONS_FILE)
             
-            if (!file.exists() || MainActivity.instance == null) {
+            if (!file.exists()) {
+                Log.d(TAG, "📭 No unsynced file exists")
+                return
+            }
+            
+            if (MainActivity.instance == null) {
+                Log.d(TAG, "⏳ MainActivity not available - will sync later")
                 return
             }
             
@@ -273,6 +313,7 @@ class NotificationListener : NotificationListenerService() {
             
             if (unsyncedArray.length() == 0) {
                 Log.d(TAG, "📭 No unsynced transactions to sync")
+                file.delete()
                 return
             }
             
@@ -761,8 +802,18 @@ class NotificationListener : NotificationListenerService() {
         isServiceRunning = false
         releaseWakeLock()
         saveQueueToDisk()
+        
+        // Unregister sync receiver
+        try {
+            syncReceiver?.let { unregisterReceiver(it) }
+            Log.d(TAG, "✅ Sync receiver unregistered")
+        } catch (e: Exception) {
+            Log.e(TAG, "⚠️ Error unregistering sync receiver: ${e.message}")
+        }
+        
         super.onDestroy()
         
+        // Restart service
         val restartIntent = Intent(applicationContext, NotificationListener::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             applicationContext.startForegroundService(restartIntent)
