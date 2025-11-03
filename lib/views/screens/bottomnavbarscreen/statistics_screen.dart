@@ -366,7 +366,7 @@ class StatisticsScreenState extends State<StatisticsScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('No transactions found for this period'),
-            backgroundColor: Colors.orange,
+            backgroundColor: AppColors.primary,
           ),
         );
         return;
@@ -960,7 +960,7 @@ class StatisticsScreenState extends State<StatisticsScreen>
                           ]
                         : null,
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -969,7 +969,7 @@ class StatisticsScreenState extends State<StatisticsScreen>
                         color: _type == 'Expense'
                             ? AppColors.expense
                             : AppColors.textSecondary,
-                        size: 18,
+                        size: 16,
                       ),
                       const SizedBox(width: 6),
                       Text(
@@ -1025,7 +1025,7 @@ class StatisticsScreenState extends State<StatisticsScreen>
                           ]
                         : null,
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
