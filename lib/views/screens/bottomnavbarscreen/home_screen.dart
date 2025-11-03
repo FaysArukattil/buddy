@@ -2,7 +2,6 @@ import 'package:buddy/services/notification_service.dart';
 import 'package:buddy/utils/images.dart';
 import 'package:buddy/utils/colors.dart';
 import 'package:buddy/utils/format_utils.dart';
-import 'package:buddy/views/screens/bottomnavbarscreen/profile_screen.dart';
 import 'package:buddy/views/screens/transaction_detail_screen.dart';
 import 'package:buddy/views/screens/filtered_transactions_screen.dart';
 import 'package:buddy/repositories/transaction_repository.dart';
@@ -267,7 +266,36 @@ class HomeScreenState extends State<HomeScreen>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          // Settings Icon (LEFT)
+                          // Greeting and Name (CENTER)
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _greeting(),
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: AppColors.cardBackground
+                                          .withOpacity(0.8),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _displayName,
+                                    style: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.cardBackground,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          // Settings Icon
                           IconButton(
                             onPressed: () {
                               showModalBottomSheet(
@@ -292,49 +320,6 @@ class HomeScreenState extends State<HomeScreen>
                                 size: 24,
                                 color: AppColors.primary,
                               ),
-                            ),
-                          ),
-
-                          // Greeting and Name (CENTER)
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Text(
-                                  _greeting(),
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _displayName,
-                                  style: const TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // Profile Icon (RIGHT)
-                          IconButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const ProfileScreen(),
-                                ),
-                              ).then((_) => _refreshFromDb());
-                            },
-                            icon: const Icon(
-                              Icons.account_circle_rounded,
-                              size: 32,
-                              color: AppColors.primary,
                             ),
                           ),
                         ],

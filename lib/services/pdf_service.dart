@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
@@ -33,7 +32,10 @@ class PdfService {
 
     final dateFormat = DateFormat('MMM dd, yyyy');
     final timeFormat = DateFormat('hh:mm a');
-    final currencyFormat = NumberFormat.currency(symbol: 'Rs. ', decimalDigits: 2);
+    final currencyFormat = NumberFormat.currency(
+      symbol: 'Rs. ',
+      decimalDigits: 2,
+    );
 
     pdf.addPage(
       pw.Page(
@@ -173,7 +175,10 @@ class PdfService {
     }
 
     final balance = totalIncome - totalExpense;
-    final currencyFormat = NumberFormat.currency(symbol: 'Rs. ', decimalDigits: 2);
+    final currencyFormat = NumberFormat.currency(
+      symbol: 'Rs. ',
+      decimalDigits: 2,
+    );
 
     pdf.addPage(
       pw.MultiPage(
@@ -287,7 +292,7 @@ class PdfService {
                   } else {
                     date = DateTime.now();
                   }
-                  
+
                   final amount = (transaction['amount'] as num).toDouble();
                   final type = transaction['type'] as String;
                   final category = transaction['category'] as String;
