@@ -713,27 +713,34 @@ class NotificationService {
     if (type == 'expense') {
       if (lowerText.contains('food') ||
           lowerText.contains('swiggy') ||
-          lowerText.contains('zomato'))
+          lowerText.contains('zomato')) {
         return 'Food';
-      if (lowerText.contains('amazon') || lowerText.contains('flipkart'))
+      }
+      if (lowerText.contains('amazon') || lowerText.contains('flipkart')) {
         return 'Shopping';
+      }
       if (lowerText.contains('uber') ||
           lowerText.contains('ola') ||
-          lowerText.contains('fuel'))
+          lowerText.contains('fuel')) {
         return 'Transport';
+      }
       if (lowerText.contains('bill') ||
           lowerText.contains('electricity') ||
-          lowerText.contains('water'))
+          lowerText.contains('water')) {
         return 'Bills';
-      if (lowerText.contains('movie') || lowerText.contains('netflix'))
+      }
+      if (lowerText.contains('movie') || lowerText.contains('netflix')) {
         return 'Entertainment';
-      if (lowerText.contains('pharmacy') || lowerText.contains('hospital'))
+      }
+      if (lowerText.contains('pharmacy') || lowerText.contains('hospital')) {
         return 'Health';
+      }
       return 'Other';
     } else {
       if (lowerText.contains('salary')) return 'Salary';
-      if (lowerText.contains('refund') || lowerText.contains('cashback'))
+      if (lowerText.contains('refund') || lowerText.contains('cashback')) {
         return 'Refund';
+      }
       if (lowerText.contains('interest')) return 'Interest';
       return 'Other';
     }

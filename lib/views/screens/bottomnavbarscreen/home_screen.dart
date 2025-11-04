@@ -75,14 +75,19 @@ class HomeScreenState extends State<HomeScreen>
 
     if (state == AppLifecycleState.resumed) {
       debugPrint('📱 HOME SCREEN: App resumed - refreshing data');
-      _refreshFromDb();
+      _refreshAll(); // Refresh everything including name
     }
   }
 
   // Public method for external refresh
   Future<void> refreshData() async {
     debugPrint('🔄 HOME SCREEN: External refresh requested');
-    await _refreshFromDb();
+    await _refreshAll();
+  }
+
+  // NEW: Refresh everything (name + transactions)
+  Future<void> _refreshAll() async {
+    await Future.wait([_loadUser(), _refreshFromDb()]);
   }
 
   Future<void> _refreshFromDb() async {
@@ -183,10 +188,27 @@ class HomeScreenState extends State<HomeScreen>
   Future<void> _loadUser() async {
     final prefs = await SharedPreferences.getInstance();
     final savedName = prefs.getString('name')?.trim() ?? '';
-    final display = savedName.isNotEmpty ? savedName : 'Guest';
+    final email = prefs.getString('email')?.trim() ?? '';
+
+    // Use the same logic as ProfileScreen to generate display name
+    String displayName = savedName;
+    if (displayName.isEmpty && email.isNotEmpty) {
+      displayName = email.contains('@') ? email.split('@').first : email;
+      if (displayName.isNotEmpty) {
+        displayName = displayName[0].toUpperCase() + displayName.substring(1);
+      }
+    }
+
+    // Fallback to 'Guest' if still empty
+    if (displayName.isEmpty) {
+      displayName = 'Guest';
+    }
+
+    debugPrint('👤 Loaded user name: $displayName');
+
     if (mounted) {
       setState(() {
-        _displayName = display;
+        _displayName = displayName;
       });
     }
   }
@@ -242,202 +264,109 @@ class HomeScreenState extends State<HomeScreen>
         children: [
           // Background
           Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
             child: Image.asset(AppImages.curvedBackground, fit: BoxFit.cover),
           ),
 
           SafeArea(
             child: RefreshIndicator(
-              onRefresh: _refreshFromDb,
+              onRefresh: _refreshAll,
               color: AppColors.primary,
               backgroundColor: Colors.white,
-              child: SingleChildScrollView(
+              displacement: 60, // Distance from top before indicator appears
+              strokeWidth: 3.0,
+              edgeOffset: 0, // Start detecting from the very top
+              child: CustomScrollView(
                 controller: _scrollController,
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header
-                      // Update the header section in home_screen.dart
-                      // Replace the existing header Row with this:
-
-                      // Header with Settings Icon
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Greeting and Name (CENTER)
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _greeting(),
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: AppColors.cardBackground
-                                          .withOpacity(0.8),
-                                    ),
+                          // Header with Settings Icon
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              // Greeting and Name
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _greeting(),
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: AppColors.cardBackground
+                                              .withOpacity(0.8),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        _displayName,
+                                        style: const TextStyle(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.cardBackground,
+                                        ),
+                                        textAlign: TextAlign.start,
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _displayName,
-                                    style: const TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.cardBackground,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          // Settings Icon
-                          IconButton(
-                            onPressed: () {
-                              showModalBottomSheet(
-                                context: context,
-                                backgroundColor: Colors.transparent,
-                                isScrollControlled: true,
-                                builder: (context) => SettingsModal(
-                                  onDataCleared: () {
-                                    _refreshFromDb();
-                                  },
                                 ),
+                              ),
+                              // Settings Icon
+                              IconButton(
+                                onPressed: () {
+                                  showModalBottomSheet(
+                                    context: context,
+                                    backgroundColor: Colors.transparent,
+                                    isScrollControlled: true,
+                                    builder: (context) => SettingsModal(
+                                      onDataCleared: () {
+                                        _refreshAll();
+                                      },
+                                    ),
+                                  );
+                                },
+                                icon: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(
+                                    Icons.settings_rounded,
+                                    size: 24,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // Balance Card
+                          AnimatedBuilder(
+                            animation: _bobAnimation,
+                            builder: (context, child) {
+                              return Transform.translate(
+                                offset: Offset(0, _bobAnimation.value),
+                                child: child,
                               );
                             },
-                            icon: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(
-                                Icons.settings_rounded,
-                                size: 24,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Balance Card
-                      AnimatedBuilder(
-                        animation: _bobAnimation,
-                        builder: (context, child) {
-                          return Transform.translate(
-                            offset: Offset(0, _bobAnimation.value),
-                            child: child,
-                          );
-                        },
-                        child: GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    const FilteredTransactionsScreen(
-                                      type: 'All',
-                                    ),
-                              ),
-                            ).then((_) => _refreshFromDb());
-                          },
-                          child: Container(
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  AppColors.primary,
-                                  AppColors.primary.withOpacity(0.8),
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.primary.withOpacity(0.3),
-                                  blurRadius: 15,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
-                            ),
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Current Balance',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  FormatUtils.formatCurrency(
-                                    _totalBalance,
-                                    compact: false,
-                                  ),
-                                  style: TextStyle(
-                                    color: _totalBalance >= 0
-                                        ? Colors.white
-                                        : Colors.red.shade300,
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: _buildStatTile(
-                                        label: 'Income',
-                                        value: _income,
-                                        icon: Icons.arrow_upward_rounded,
-                                        color: AppColors.income,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: _buildStatTile(
-                                        label: 'Expenses',
-                                        value: _expenses,
-                                        icon: Icons.arrow_downward_rounded,
-                                        color: AppColors.expense,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // Transactions Section
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Recent Transactions',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          if (_transactions.isNotEmpty)
-                            TextButton(
-                              onPressed: () {
+                            child: GestureDetector(
+                              onTap: () {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
@@ -446,71 +375,180 @@ class HomeScreenState extends State<HomeScreen>
                                           type: 'All',
                                         ),
                                   ),
-                                ).then((_) => _refreshFromDb());
+                                ).then((_) => _refreshAll());
                               },
-                              child: const Text('See all'),
+                              child: Container(
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      AppColors.primary,
+                                      AppColors.primary.withOpacity(0.8),
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.primary.withOpacity(0.3),
+                                      blurRadius: 15,
+                                      offset: const Offset(0, 8),
+                                    ),
+                                  ],
+                                ),
+                                padding: const EdgeInsets.all(20),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Current Balance',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      FormatUtils.formatCurrency(
+                                        _totalBalance,
+                                        compact: false,
+                                      ),
+                                      style: TextStyle(
+                                        color: _totalBalance >= 0
+                                            ? Colors.white
+                                            : Colors.red.shade300,
+                                        fontSize: 32,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildStatTile(
+                                            label: 'Income',
+                                            value: _income,
+                                            icon: Icons.arrow_upward_rounded,
+                                            color: AppColors.income,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: _buildStatTile(
+                                            label: 'Expenses',
+                                            value: _expenses,
+                                            icon: Icons.arrow_downward_rounded,
+                                            color: AppColors.expense,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Transactions Section
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Recent Transactions',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              if (_transactions.isNotEmpty)
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const FilteredTransactionsScreen(
+                                              type: 'All',
+                                            ),
+                                      ),
+                                    ).then((_) => _refreshAll());
+                                  },
+                                  child: const Text('See all'),
+                                ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 12),
                         ],
                       ),
-
-                      const SizedBox(height: 12),
-
-                      // Transaction List
-                      if (_isLoading)
-                        const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(40.0),
-                            child: CircularProgressIndicator(
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        )
-                      else if (_transactions.isEmpty)
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(40.0),
-                            child: Column(
-                              children: [
-                                Icon(
-                                  Icons.receipt_long_rounded,
-                                  size: 64,
-                                  color: Colors.grey.shade400,
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No transactions yet',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.grey.shade600,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Tap + to add your first transaction\nor enable notification access',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey.shade500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _transactions.length,
-                          itemBuilder: (context, index) {
-                            final tx = _transactions[index];
-                            return _buildTransactionTile(tx);
-                          },
-                        ),
-                    ],
+                    ),
                   ),
-                ),
+
+                  // Transaction List or Loading/Empty State
+                  if (_isLoading)
+                    const SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(40.0),
+                          child: CircularProgressIndicator(
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    )
+                  else if (_transactions.isEmpty)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(40.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.receipt_long_rounded,
+                                size: 64,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No transactions yet',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Tap + to add your first transaction\nor enable notification access',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate((context, index) {
+                          final tx = _transactions[index];
+                          return _buildTransactionTile(tx);
+                        }, childCount: _transactions.length),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
@@ -534,7 +572,7 @@ class HomeScreenState extends State<HomeScreen>
               type: label == 'Income' ? 'Income' : 'Expense',
             ),
           ),
-        ).then((_) => _refreshFromDb());
+        ).then((_) => _refreshAll());
       },
       child: Container(
         padding: const EdgeInsets.all(12),
@@ -597,7 +635,7 @@ class HomeScreenState extends State<HomeScreen>
               MaterialPageRoute(
                 builder: (_) => TransactionDetailScreen(data: tx),
               ),
-            ).then((_) => _refreshFromDb());
+            ).then((_) => _refreshAll());
           },
           child: Padding(
             padding: const EdgeInsets.all(12.0),

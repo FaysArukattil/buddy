@@ -8,49 +8,94 @@ import 'package:buddy/views/screens/transaction_detail_screen.dart';
 
 class FilteredTransactionsScreen extends StatefulWidget {
   final String type; // 'income', 'expense', or 'All'
-  
+
   const FilteredTransactionsScreen({super.key, required this.type});
 
   @override
-  State<FilteredTransactionsScreen> createState() => _FilteredTransactionsScreenState();
+  State<FilteredTransactionsScreen> createState() =>
+      _FilteredTransactionsScreenState();
 }
 
 class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final TransactionRepository _repo;
   List<Map<String, Object?>> _allRows = [];
   List<Map<String, dynamic>> _displayedTransactions = [];
+  List<Map<String, dynamic>> _nextTransactions = [];
   DateTime _currentMonth = DateTime.now();
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = true;
   double _total = 0;
-  bool _showingToday = true; // true = today, false = month
-  late AnimationController _animController;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
+  bool _showingToday = true;
+
+  // Drag state for real-time preview
+  double _dragOffset = 0.0;
+  bool _isDragging = false;
+  DateTime? _targetDate;
+  DateTime? _targetMonth;
+
+  // Animation controllers
+  late AnimationController _slideController;
+  late Animation<Offset> _currentSlideAnimation;
+  late Animation<Offset> _nextSlideAnimation;
+  bool _isTransitioning = false;
+  bool _isSwipingNext = true;
+
+  // Toggle animation properties
+  double _togglePage = 0.0;
+  bool _toggleDragging = false;
+  double _toggleDragStartPage = 0.0;
+  double _toggleAccumX = 0.0;
+
+  // Page indicator animation
+  late AnimationController _indicatorController;
+  late Animation<double> _indicatorAnimation;
 
   @override
   void initState() {
     super.initState();
     _repo = TransactionRepository();
-    _animController = AnimationController(
+
+    _slideController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 350),
     );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animController, curve: Curves.easeOut),
+
+    _indicatorController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
     );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.1),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic));
+
+    _indicatorAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _indicatorController, curve: Curves.easeInOut),
+    );
+
+    _updateSlideAnimations(true);
     _load();
-    _animController.forward();
+  }
+
+  void _updateSlideAnimations(bool isNext) {
+    _currentSlideAnimation =
+        Tween<Offset>(
+          begin: Offset.zero,
+          end: Offset(isNext ? -1.0 : 1.0, 0),
+        ).animate(
+          CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
+        );
+
+    _nextSlideAnimation =
+        Tween<Offset>(
+          begin: Offset(isNext ? 1.0 : -1.0, 0),
+          end: Offset.zero,
+        ).animate(
+          CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
+        );
   }
 
   @override
   void dispose() {
-    _animController.dispose();
+    _slideController.dispose();
+    _indicatorController.dispose();
     super.dispose();
   }
 
@@ -72,25 +117,28 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
     }
   }
 
-  void _filterByMonth() {
+  List<Map<String, dynamic>> _getFilteredTransactions(
+    DateTime date,
+    bool isToday,
+  ) {
     final filtered = _allRows.where((r) {
       final type = (r['type'] as String?)?.toLowerCase().trim() ?? '';
-      // If type is 'All', show both income and expense
-      if (widget.type.toLowerCase().trim() != 'all' && widget.type.toLowerCase().trim() != type) return false;
-      
+      if (widget.type.toLowerCase().trim() != 'all' &&
+          widget.type.toLowerCase().trim() != type)
+        return false;
+
       final dateStr = r['date'] as String?;
       if (dateStr == null) return false;
-      
+
       final dt = DateTime.tryParse(dateStr);
       if (dt == null) return false;
-      
-      // Filter by today or month
-      if (_showingToday) {
-        return dt.year == _selectedDate.year && 
-               dt.month == _selectedDate.month && 
-               dt.day == _selectedDate.day;
+
+      if (isToday) {
+        return dt.year == date.year &&
+            dt.month == date.month &&
+            dt.day == date.day;
       } else {
-        return dt.year == _currentMonth.year && dt.month == _currentMonth.month;
+        return dt.year == date.year && dt.month == date.month;
       }
     }).toList();
 
@@ -101,20 +149,14 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
       return dateB.compareTo(dateA);
     });
 
-    double total = 0;
-    final displayed = filtered.map((r) {
+    return filtered.map((r) {
       final dt = DateTime.tryParse(r['date'] as String) ?? DateTime.now();
       final amt = (r['amount'] as num).toDouble();
-      final type = (r['type'] as String).toLowerCase().trim();
-      // Add income, subtract expense to show current balance
-      if (type == 'income') {
-        total += amt;
-      } else if (type == 'expense') {
-        total -= amt;
-      }
       return {
         'type': r['type'],
-        'title': (r['note'] as String?)?.isNotEmpty == true ? r['note'] : r['category'],
+        'title': (r['note'] as String?)?.isNotEmpty == true
+            ? r['note']
+            : r['category'],
         'subtitle': r['category'],
         'amount': amt,
         'time': _formatTime(dt),
@@ -126,47 +168,235 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
         'id': r['id'],
       };
     }).toList();
+  }
+
+  void _filterByMonth() {
+    final transactions = _getFilteredTransactions(
+      _showingToday ? _selectedDate : _currentMonth,
+      _showingToday,
+    );
+
+    double total = 0;
+    for (var tx in transactions) {
+      final type = (tx['type'] as String).toLowerCase().trim();
+      final amt = tx['amount'] as double;
+      if (type == 'income') {
+        total += amt;
+      } else if (type == 'expense') {
+        total -= amt;
+      }
+    }
 
     setState(() {
-      _displayedTransactions = displayed;
+      _displayedTransactions = transactions;
       _total = total;
     });
   }
 
-  void _previousMonth() {
-    if (_animController.isAnimating) return;
-    _animController.reverse().then((_) {
-      if (!mounted) return;
-      setState(() {
-        if (_showingToday) {
-          _selectedDate = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day - 1);
-        } else {
-          _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1);
-        }
-      });
-      _filterByMonth();
-      _animController.forward();
+  // Real-time drag preview handlers
+  void _onHorizontalDragStart(DragStartDetails details) {
+    if (_isTransitioning) return;
+    setState(() {
+      _isDragging = true;
+      _dragOffset = 0.0;
     });
   }
 
-  void _nextMonth() {
-    if (_animController.isAnimating) return;
-    _animController.reverse().then((_) {
+  void _onHorizontalDragUpdate(DragUpdateDetails details) {
+    if (_isTransitioning) return;
+    setState(() {
+      _dragOffset += details.delta.dx;
+
+      // Preload next/previous transactions when dragging
+      if (_dragOffset.abs() > 50 && _nextTransactions.isEmpty) {
+        final isNext = _dragOffset < 0;
+        if (_showingToday) {
+          _targetDate = DateTime(
+            _selectedDate.year,
+            _selectedDate.month,
+            _selectedDate.day + (isNext ? 1 : -1),
+          );
+          _nextTransactions = _getFilteredTransactions(_targetDate!, true);
+        } else {
+          _targetMonth = DateTime(
+            _currentMonth.year,
+            _currentMonth.month + (isNext ? 1 : -1),
+          );
+          _nextTransactions = _getFilteredTransactions(_targetMonth!, false);
+        }
+      }
+    });
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    if (_isTransitioning) return;
+
+    final threshold = MediaQuery.of(context).size.width * 0.3;
+    final velocity = details.primaryVelocity ?? 0;
+
+    if (_dragOffset.abs() > threshold || velocity.abs() > 500) {
+      // Complete the swipe with animation
+      final isNext = _dragOffset < 0 || velocity < -500;
+      _completeSwipeWithAnimation(isNext);
+    } else {
+      // Cancel the swipe
+      setState(() {
+        _dragOffset = 0.0;
+        _isDragging = false;
+        _nextTransactions = [];
+        _targetDate = null;
+        _targetMonth = null;
+      });
+    }
+  }
+
+  void _completeSwipeWithAnimation(bool isNext) {
+    HapticFeedback.mediumImpact();
+    _indicatorController.forward(from: 0);
+
+    setState(() {
+      _isTransitioning = true;
+      _isSwipingNext = isNext;
+      _isDragging = false;
+    });
+
+    _updateSlideAnimations(isNext);
+    _slideController.reset();
+    _slideController.forward().then((_) {
       if (!mounted) return;
+
       setState(() {
         if (_showingToday) {
-          _selectedDate = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day + 1);
+          _selectedDate =
+              _targetDate ??
+              DateTime(
+                _selectedDate.year,
+                _selectedDate.month,
+                _selectedDate.day + (isNext ? 1 : -1),
+              );
         } else {
-          _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1);
+          _currentMonth =
+              _targetMonth ??
+              DateTime(
+                _currentMonth.year,
+                _currentMonth.month + (isNext ? 1 : -1),
+              );
         }
+
+        // Calculate total for new transactions
+        double total = 0;
+        for (var tx in _nextTransactions) {
+          final type = (tx['type'] as String).toLowerCase().trim();
+          final amt = tx['amount'] as double;
+          if (type == 'income') {
+            total += amt;
+          } else if (type == 'expense') {
+            total -= amt;
+          }
+        }
+
+        _displayedTransactions = _nextTransactions;
+        _total = total;
+        _dragOffset = 0.0;
+        _nextTransactions = [];
+        _targetDate = null;
+        _targetMonth = null;
+        _isTransitioning = false;
       });
-      _filterByMonth();
-      _animController.forward();
+      _slideController.reset();
+    });
+  }
+
+  // Arrow button handlers (uses animation)
+  void _changeMonth(bool isNext) {
+    if (_isTransitioning || _isDragging) return;
+
+    HapticFeedback.mediumImpact();
+    _indicatorController.forward(from: 0);
+
+    final nextMonth = DateTime(
+      _currentMonth.year,
+      _currentMonth.month + (isNext ? 1 : -1),
+    );
+
+    _nextTransactions = _getFilteredTransactions(nextMonth, false);
+
+    setState(() {
+      _isTransitioning = true;
+      _isSwipingNext = isNext;
+    });
+
+    _updateSlideAnimations(isNext);
+    _slideController.reset();
+    _slideController.forward().then((_) {
+      if (!mounted) return;
+      setState(() {
+        _currentMonth = nextMonth;
+        _displayedTransactions = _nextTransactions;
+
+        double total = 0;
+        for (var tx in _displayedTransactions) {
+          final type = (tx['type'] as String).toLowerCase().trim();
+          final amt = tx['amount'] as double;
+          if (type == 'income') {
+            total += amt;
+          } else if (type == 'expense') {
+            total -= amt;
+          }
+        }
+        _total = total;
+        _isTransitioning = false;
+      });
+      _slideController.reset();
+    });
+  }
+
+  void _changeDate(bool isNext) {
+    if (_isTransitioning || _isDragging) return;
+
+    HapticFeedback.mediumImpact();
+    _indicatorController.forward(from: 0);
+
+    final nextDate = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day + (isNext ? 1 : -1),
+    );
+
+    _nextTransactions = _getFilteredTransactions(nextDate, true);
+
+    setState(() {
+      _isTransitioning = true;
+      _isSwipingNext = isNext;
+    });
+
+    _updateSlideAnimations(isNext);
+    _slideController.reset();
+    _slideController.forward().then((_) {
+      if (!mounted) return;
+      setState(() {
+        _selectedDate = nextDate;
+        _displayedTransactions = _nextTransactions;
+
+        double total = 0;
+        for (var tx in _displayedTransactions) {
+          final type = (tx['type'] as String).toLowerCase().trim();
+          final amt = tx['amount'] as double;
+          if (type == 'income') {
+            total += amt;
+          } else if (type == 'expense') {
+            total -= amt;
+          }
+        }
+        _total = total;
+        _isTransitioning = false;
+      });
+      _slideController.reset();
     });
   }
 
   void _showMonthPicker() {
-    HapticFeedback.mediumImpact(); // iOS haptic feedback
+    HapticFeedback.mediumImpact();
     showCupertinoModalPopup(
       context: context,
       builder: (BuildContext context) {
@@ -198,7 +428,10 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
                           if (_showingToday) {
                             _selectedDate = tempDate;
                           } else {
-                            _currentMonth = DateTime(tempDate.year, tempDate.month);
+                            _currentMonth = DateTime(
+                              tempDate.year,
+                              tempDate.month,
+                            );
                           }
                         });
                         _filterByMonth();
@@ -210,11 +443,13 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
               ),
               Expanded(
                 child: CupertinoDatePicker(
-                  mode: _showingToday ? CupertinoDatePickerMode.date : CupertinoDatePickerMode.monthYear,
+                  mode: _showingToday
+                      ? CupertinoDatePickerMode.date
+                      : CupertinoDatePickerMode.monthYear,
                   initialDateTime: tempDate,
                   maximumDate: DateTime.now(),
                   onDateTimeChanged: (DateTime newDate) {
-                    HapticFeedback.selectionClick(); // Haptic on scroll
+                    HapticFeedback.selectionClick();
                     tempDate = newDate;
                   },
                 ),
@@ -226,6 +461,25 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
     );
   }
 
+  void _toggleView(int index) {
+    if ((_showingToday && index == 0) || (!_showingToday && index == 1)) {
+      return;
+    }
+
+    HapticFeedback.mediumImpact();
+
+    setState(() {
+      _showingToday = (index == 0);
+      _togglePage = index.toDouble();
+      if (_showingToday) {
+        _selectedDate = DateTime.now();
+      } else {
+        _currentMonth = DateTime.now();
+      }
+    });
+    _filterByMonth();
+  }
+
   String _formatTime(DateTime d) {
     final hour = d.hour;
     final minute = d.minute.toString().padLeft(2, '0');
@@ -234,35 +488,70 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
     return '$h12:$minute $ampm';
   }
 
-  String _formatCurrency(double v) => FormatUtils.formatCurrency(v, compact: true);
+  String _formatCurrency(double v) =>
+      FormatUtils.formatCurrency(v, compact: true);
 
   String _formatTxDate(DateTime d) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[d.month - 1]} ${d.day}, ${d.year}';
   }
 
   String _monthYearLabel() {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[_currentMonth.month - 1]} ${_currentMonth.year}';
   }
-  
+
   String _fullDateLabel() {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[_selectedDate.month - 1]} ${_selectedDate.day}, ${_selectedDate.year}';
   }
 
   IconData _iconForNote(String? note) {
     final n = (note ?? '').toLowerCase();
-    if (n.contains('coffee') || n.contains('cafe') || n.contains('drink') || n.contains('food') || n.contains('snack')) {
+    if (n.contains('coffee') ||
+        n.contains('cafe') ||
+        n.contains('drink') ||
+        n.contains('food') ||
+        n.contains('snack')) {
       return Icons.fastfood_rounded;
     }
     if (n.contains('fuel') || n.contains('petrol') || n.contains('gas')) {
@@ -277,7 +566,10 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
     if (n.contains('phone') || n.contains('mobile')) {
       return Icons.phone_android_rounded;
     }
-    if (n.contains('netflix') || n.contains('hotstar') || n.contains('youtube') || n.contains('movie')) {
+    if (n.contains('netflix') ||
+        n.contains('hotstar') ||
+        n.contains('youtube') ||
+        n.contains('movie')) {
       return Icons.movie_rounded;
     }
     if (n.contains('gym') || n.contains('fitness')) {
@@ -289,7 +581,10 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
     if (n.contains('refund')) {
       return Icons.reply_rounded;
     }
-    if (n.contains('salary') || n.contains('upwork') || n.contains('payment') || n.contains('pay')) {
+    if (n.contains('salary') ||
+        n.contains('upwork') ||
+        n.contains('payment') ||
+        n.contains('pay')) {
       return Icons.payments_rounded;
     }
     if (n.contains('travel') || n.contains('flight') || n.contains('trip')) {
@@ -301,10 +596,14 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
     if (n.contains('pet')) {
       return Icons.pets_rounded;
     }
-    if (n.contains('medical') || n.contains('doctor') || n.contains('hospital')) {
+    if (n.contains('medical') ||
+        n.contains('doctor') ||
+        n.contains('hospital')) {
       return Icons.medical_services_rounded;
     }
-    if (n.contains('school') || n.contains('tuition') || n.contains('education')) {
+    if (n.contains('school') ||
+        n.contains('tuition') ||
+        n.contains('education')) {
       return Icons.school_rounded;
     }
     if (n.contains('game') || n.contains('esports')) {
@@ -317,7 +616,7 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
     final txType = (tx['type'] as String).toLowerCase();
     final isTxIncome = txType == 'income';
     final amountColor = isTxIncome ? AppColors.income : AppColors.expense;
-    
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
@@ -398,7 +697,8 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      (isTxIncome ? '+' : '-') + _formatCurrency(tx['amount'] as double),
+                      (isTxIncome ? '+' : '-') +
+                          _formatCurrency(tx['amount'] as double),
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 14,
@@ -428,271 +728,472 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
   Widget build(BuildContext context) {
     final isIncome = widget.type.toLowerCase() == 'income';
     final isAll = widget.type.toLowerCase() == 'all';
+    final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       extendBodyBehindAppBar: true,
-      body: Column(
+      body: Stack(
         children: [
-          // Animated Header
-          AnimatedBuilder(
-            animation: _fadeAnimation,
-            builder: (context, child) {
-              return Opacity(
-                opacity: _fadeAnimation.value,
-                child: Container(
-                  padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 12, 16, 16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.primary,
-                        AppColors.primary.withValues(alpha: 0.8),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+          Column(
+            children: [
+              // Header
+              Container(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  MediaQuery.of(context).padding.top + 12,
+                  16,
+                  16,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.primary,
+                      AppColors.primary.withValues(alpha: 0.8),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          IconButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                          ),
-                      Expanded(
-                        child: Text(
-                          widget.type,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(
+                            Icons.arrow_back_rounded,
                             color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                      ),
-                          const SizedBox(width: 48),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      // Toggle button for Today / This Month
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              HapticFeedback.mediumImpact();
+                        Expanded(
+                          child: Text(
+                            widget.type,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 48),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // Toggle
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final totalWidth = constraints.maxWidth * 0.7;
+                        const itemCount = 2;
+                        final itemWidth = totalWidth / itemCount;
+                        final indicatorWidth = itemWidth - 4;
+
+                        final animatedLeft =
+                            (_toggleDragging
+                                    ? _togglePage.clamp(0, itemCount - 1)
+                                    : (_showingToday ? 0.0 : 1.0)) *
+                                itemWidth +
+                            2;
+
+                        return Center(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onPanStart: (details) {
+                              _toggleAccumX = 0;
                               setState(() {
-                                _showingToday = true;
-                                _selectedDate = DateTime.now();
+                                _toggleDragging = true;
+                                _toggleDragStartPage = _showingToday
+                                    ? 0.0
+                                    : 1.0;
+                                _togglePage = _toggleDragStartPage;
                               });
-                              _filterByMonth();
+                            },
+                            onPanUpdate: (details) {
+                              _toggleAccumX += details.delta.dx;
+                              final deltaPages = _toggleAccumX / itemWidth;
+                              final double newPage =
+                                  (_toggleDragStartPage + deltaPages).clamp(
+                                    0.0,
+                                    1.0,
+                                  );
+                              setState(() {
+                                _togglePage = newPage;
+                              });
+                            },
+                            onPanEnd: (details) {
+                              final target = _togglePage.round();
+                              setState(() {
+                                _toggleDragging = false;
+                              });
+                              _toggleView(target);
                             },
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: _showingToday ? Colors.white : Colors.white.withValues(alpha: 0.15),
-                                borderRadius: const BorderRadius.only(
-                                  topLeft: Radius.circular(12),
-                                  bottomLeft: Radius.circular(12),
-                                ),
-                              ),
-                              child: Text(
-                                'Today',
-                                style: TextStyle(
-                                  color: _showingToday ? AppColors.primary : Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () {
-                              HapticFeedback.mediumImpact();
-                              setState(() {
-                                _showingToday = false;
-                                _currentMonth = DateTime.now();
-                              });
-                              _filterByMonth();
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: !_showingToday ? Colors.white : Colors.white.withValues(alpha: 0.15),
-                                borderRadius: const BorderRadius.only(
-                                  topRight: Radius.circular(12),
-                                  bottomRight: Radius.circular(12),
-                                ),
-                              ),
-                              child: Text(
-                                'This Month',
-                                style: TextStyle(
-                                  color: !_showingToday ? AppColors.primary : Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // Date/Month navigation - tap to open date picker
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Opacity(
-                            opacity: 0.0, // Hide navigation arrows
-                            child: IconButton(
-                              onPressed: null,
-                              icon: const Icon(Icons.chevron_left_rounded, color: Colors.white, size: 32),
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: _showMonthPicker,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              width: totalWidth,
+                              height: 40,
                               decoration: BoxDecoration(
                                 color: Colors.white.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.3),
-                                  width: 1,
-                                ),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
+                              child: Stack(
                                 children: [
-                                  Text(
-                                    _showingToday ? _fullDateLabel() : _monthYearLabel(),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w600,
+                                  Positioned(
+                                    left: animatedLeft,
+                                    top: 2,
+                                    width: indicatorWidth,
+                                    height: 36,
+                                    child: AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 120,
+                                      ),
+                                      curve: Curves.easeOut,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  const Icon(
-                                    Icons.calendar_today_rounded,
-                                    color: Colors.white,
-                                    size: 16,
+                                  Row(
+                                    children: [
+                                      SizedBox(
+                                        width: itemWidth,
+                                        child: Center(
+                                          child: GestureDetector(
+                                            onTap: () => _toggleView(0),
+                                            child: Text(
+                                              'Today',
+                                              style: TextStyle(
+                                                color: _showingToday
+                                                    ? AppColors.primary
+                                                    : Colors.white,
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: itemWidth,
+                                        child: Center(
+                                          child: GestureDetector(
+                                            onTap: () => _toggleView(1),
+                                            child: Text(
+                                              'This Month',
+                                              style: TextStyle(
+                                                color: !_showingToday
+                                                    ? AppColors.primary
+                                                    : Colors.white,
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
                             ),
                           ),
-                          Opacity(
-                            opacity: 0.0, // Hide navigation arrows
-                            child: IconButton(
-                              onPressed: null,
-                              icon: const Icon(Icons.chevron_right_rounded, color: Colors.white, size: 32),
-                            ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    // Date/Month navigation
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        IconButton(
+                          onPressed: (_isTransitioning || _isDragging)
+                              ? null
+                              : () => _showingToday
+                                    ? _changeDate(false)
+                                    : _changeMonth(false),
+                          icon: Icon(
+                            Icons.chevron_left_rounded,
+                            color: (_isTransitioning || _isDragging)
+                                ? Colors.white.withValues(alpha: 0.3)
+                                : Colors.white,
+                            size: 32,
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // Total
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(16),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Total',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
+                        GestureDetector(
+                          onTap: _showMonthPicker,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.3),
+                                width: 1,
                               ),
                             ),
-                            Text(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _showingToday
+                                      ? _fullDateLabel()
+                                      : _monthYearLabel(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  Icons.calendar_today_rounded,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: (_isTransitioning || _isDragging)
+                              ? null
+                              : () => _showingToday
+                                    ? _changeDate(true)
+                                    : _changeMonth(true),
+                          icon: Icon(
+                            Icons.chevron_right_rounded,
+                            color: (_isTransitioning || _isDragging)
+                                ? Colors.white.withValues(alpha: 0.3)
+                                : Colors.white,
+                            size: 32,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Total
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Total',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Flexible(
+                            child: Text(
                               _formatCurrency(_total),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 24,
                                 fontWeight: FontWeight.w700,
                               ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Swipable transactions list with real-time preview
+              Expanded(
+                child: GestureDetector(
+                  onHorizontalDragStart: _onHorizontalDragStart,
+                  onHorizontalDragUpdate: _onHorizontalDragUpdate,
+                  onHorizontalDragEnd: _onHorizontalDragEnd,
+                  child: Stack(
+                    children: [
+                      // Current transactions (with drag offset or animation)
+                      if (!_isTransitioning)
+                        Transform.translate(
+                          offset: Offset(_dragOffset, 0),
+                          child: _buildContentView(
+                            isAll,
+                            isIncome,
+                            _displayedTransactions,
+                          ),
+                        )
+                      else
+                        SlideTransition(
+                          position: _currentSlideAnimation,
+                          child: _buildContentView(
+                            isAll,
+                            isIncome,
+                            _displayedTransactions,
+                          ),
+                        ),
+
+                      // Next/Previous transactions preview
+                      if (_isDragging && _nextTransactions.isNotEmpty)
+                        Transform.translate(
+                          offset: Offset(
+                            _dragOffset < 0
+                                ? screenWidth + _dragOffset
+                                : -screenWidth + _dragOffset,
+                            0,
+                          ),
+                          child: _buildContentView(
+                            isAll,
+                            isIncome,
+                            _nextTransactions,
+                          ),
+                        ),
+
+                      // Next content sliding in during animation
+                      if (_isTransitioning)
+                        SlideTransition(
+                          position: _nextSlideAnimation,
+                          child: _buildContentView(
+                            isAll,
+                            isIncome,
+                            _nextTransactions,
+                          ),
+                        ),
                     ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          // Page indicator
+          AnimatedBuilder(
+            animation: _indicatorAnimation,
+            builder: (context, child) {
+              if (_indicatorAnimation.value == 0) {
+                return const SizedBox.shrink();
+              }
+
+              return Positioned(
+                bottom: 20,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Opacity(
+                    opacity: 1.0 - _indicatorAnimation.value,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _isSwipingNext
+                                ? Icons.arrow_forward_rounded
+                                : Icons.arrow_back_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _showingToday
+                                ? _fullDateLabel()
+                                : _monthYearLabel(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               );
             },
           ),
-
-          // Transactions list or calendar with animation
-          Expanded(
-            child: GestureDetector(
-              onHorizontalDragEnd: (details) {
-                if (details.primaryVelocity != null) {
-                  // Lower threshold for more responsive swiping
-                  if (details.primaryVelocity! < -100) {
-                    // Swipe left -> next month
-                    _nextMonth();
-                  } else if (details.primaryVelocity! > 100) {
-                    // Swipe right -> previous month
-                    _previousMonth();
-                  }
-                }
-              },
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: SlideTransition(
-                  position: _slideAnimation,
-                  child: _isLoading
-                    ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-                    : _displayedTransactions.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  isAll ? Icons.receipt_long_rounded : (isIncome ? Icons.trending_up_rounded : Icons.trending_down_rounded),
-                                  size: 80,
-                                  color: Colors.grey.shade300,
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No ${widget.type.toLowerCase()} transactions',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    color: Colors.grey.shade600,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'for ${_monthYearLabel()}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey.shade500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : ListView.builder(
-                              padding: const EdgeInsets.all(16),
-                              itemCount: _displayedTransactions.length,
-                              itemBuilder: (context, index) {
-                                final tx = _displayedTransactions[index];
-                                return _buildTransactionCard(tx, isAll);
-                              },
-                            ),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildContentView(
+    bool isAll,
+    bool isIncome,
+    List<Map<String, dynamic>> transactions,
+  ) {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    }
+
+    if (transactions.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isAll
+                  ? Icons.receipt_long_rounded
+                  : (isIncome
+                        ? Icons.trending_up_rounded
+                        : Icons.trending_down_rounded),
+              size: 80,
+              color: Colors.grey.shade300,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No ${widget.type.toLowerCase()} transactions',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _showingToday
+                  ? 'for ${_fullDateLabel()}'
+                  : 'for ${_monthYearLabel()}',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      physics: const BouncingScrollPhysics(),
+      itemCount: transactions.length,
+      itemBuilder: (context, index) {
+        final tx = transactions[index];
+        return _buildTransactionCard(tx, isAll);
+      },
     );
   }
 }
