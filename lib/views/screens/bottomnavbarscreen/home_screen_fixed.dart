@@ -19,7 +19,6 @@ class HomeScreen extends StatefulWidget {
 
 class HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
-  
   String _displayName = '';
   double _totalBalance = 0;
   double _income = 0;
@@ -30,7 +29,7 @@ class HomeScreenState extends State<HomeScreen>
   final List<Map<String, dynamic>> _transactions = [];
   late final TransactionRepository _repo;
   bool _isLoading = true;
-  
+
   // Track if we need to refresh
   bool _needsRefresh = true;
 
@@ -49,10 +48,10 @@ class HomeScreenState extends State<HomeScreen>
       end: 6.0,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
     _controller.repeat(reverse: true);
-    
+
     // Check and show notification permission popup on first launch
     _checkNotificationPermission();
-    
+
     // Load data after frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshFromDb();
@@ -76,21 +75,22 @@ class HomeScreenState extends State<HomeScreen>
   // Check and show notification permission popup on first launch
   Future<void> _checkNotificationPermission() async {
     final prefs = await SharedPreferences.getInstance();
-    final hasAskedPermission = prefs.getBool('has_asked_notification_permission') ?? false;
-    
+    final hasAskedPermission =
+        prefs.getBool('has_asked_notification_permission') ?? false;
+
     if (!hasAskedPermission && mounted) {
       // Wait a bit for the screen to fully load
       await Future.delayed(const Duration(milliseconds: 1000));
-      
+
       if (!mounted) return;
-      
+
       // Check if permission is already granted
       final isGranted = await NotificationListenerService.isPermissionGranted();
-      
+
       if (!isGranted && mounted) {
         // Show the permission dialog
         _showNotificationPermissionDialog();
-        
+
         // Mark that we've asked
         await prefs.setBool('has_asked_notification_permission', true);
       }
@@ -102,15 +102,13 @@ class HomeScreenState extends State<HomeScreen>
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
+                color: AppColors.primary.withValues(alpha: .1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -123,10 +121,7 @@ class HomeScreenState extends State<HomeScreen>
             const Expanded(
               child: Text(
                 'Enable Auto-Tracking',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -143,10 +138,10 @@ class HomeScreenState extends State<HomeScreen>
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.income.withOpacity(0.1),
+                color: AppColors.income.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: AppColors.income.withOpacity(0.3),
+                  color: AppColors.income.withValues(alpha: 0.3),
                 ),
               ),
               child: const Column(
@@ -154,7 +149,11 @@ class HomeScreenState extends State<HomeScreen>
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.check_circle, color: AppColors.income, size: 20),
+                      Icon(
+                        Icons.check_circle,
+                        color: AppColors.income,
+                        size: 20,
+                      ),
                       SizedBox(width: 8),
                       Text(
                         'Automatic transaction detection',
@@ -165,7 +164,11 @@ class HomeScreenState extends State<HomeScreen>
                   SizedBox(height: 8),
                   Row(
                     children: [
-                      Icon(Icons.check_circle, color: AppColors.income, size: 20),
+                      Icon(
+                        Icons.check_circle,
+                        color: AppColors.income,
+                        size: 20,
+                      ),
                       SizedBox(width: 8),
                       Text(
                         'Smart categorization',
@@ -176,7 +179,11 @@ class HomeScreenState extends State<HomeScreen>
                   SizedBox(height: 8),
                   Row(
                     children: [
-                      Icon(Icons.check_circle, color: AppColors.income, size: 20),
+                      Icon(
+                        Icons.check_circle,
+                        color: AppColors.income,
+                        size: 20,
+                      ),
                       SizedBox(width: 8),
                       Text(
                         'No manual entry needed',
@@ -191,9 +198,9 @@ class HomeScreenState extends State<HomeScreen>
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: Colors.blue.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -202,10 +209,7 @@ class HomeScreenState extends State<HomeScreen>
                   Expanded(
                     child: Text(
                       'This opens Settings → Notification Access. Find "Buddy" in the list and toggle it ON to allow reading notifications.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[700],
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[700]),
                     ),
                   ),
                 ],
@@ -214,20 +218,14 @@ class HomeScreenState extends State<HomeScreen>
             const SizedBox(height: 8),
             Text(
               'You can enable this later from Profile → Settings.',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Not Now',
-              style: TextStyle(color: Colors.grey),
-            ),
+            child: const Text('Not Now', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -273,31 +271,31 @@ class HomeScreenState extends State<HomeScreen>
 
   Future<void> _refreshFromDb() async {
     if (!mounted) return;
-    
+
     debugPrint('📊 HOME SCREEN: Loading transactions...');
-    
+
     try {
       // Get all transactions from database
       final rows = await _repo.getAll();
       debugPrint('📖 Found ${rows.length} total transactions');
-      
+
       if (!mounted) return;
-      
+
       // Calculate current month totals
       final now = DateTime.now();
       double monthIncome = 0;
       double monthExpense = 0;
-      
+
       // Process all transactions
       final List<Map<String, dynamic>> allTransactions = [];
-      
+
       for (final row in rows) {
         // Parse transaction data
         final amount = (row['amount'] as num?)?.toDouble() ?? 0;
         final type = (row['type'] as String?)?.toLowerCase() ?? '';
         final dateStr = row['date'] as String? ?? '';
         final date = DateTime.tryParse(dateStr) ?? now;
-        
+
         // Check if transaction is in current month
         if (date.year == now.year && date.month == now.month) {
           if (type == 'income') {
@@ -306,13 +304,13 @@ class HomeScreenState extends State<HomeScreen>
             monthExpense += amount;
           }
         }
-        
+
         // Add to transaction list
         allTransactions.add({
           'id': row['id'],
           'type': row['type'],
-          'title': (row['note'] as String?)?.isNotEmpty == true 
-              ? row['note'] 
+          'title': (row['note'] as String?)?.isNotEmpty == true
+              ? row['note']
               : row['category'],
           'subtitle': row['category'],
           'amount': amount,
@@ -326,22 +324,22 @@ class HomeScreenState extends State<HomeScreen>
           'icon': row['icon'],
         });
       }
-      
+
       // Sort transactions by date (newest first)
       allTransactions.sort((a, b) {
         final dateA = a['date'] as DateTime;
         final dateB = b['date'] as DateTime;
         return dateB.compareTo(dateA);
       });
-      
+
       // Calculate balance
       final balance = monthIncome - monthExpense;
-      
+
       debugPrint('💰 Current Month Summary:');
       debugPrint('   Income: ₹$monthIncome');
       debugPrint('   Expense: ₹$monthExpense');
       debugPrint('   Balance: ₹$balance');
-      
+
       // Update UI
       if (mounted) {
         setState(() {
@@ -353,7 +351,7 @@ class HomeScreenState extends State<HomeScreen>
           _isLoading = false;
           _needsRefresh = false;
         });
-        
+
         debugPrint('✅ UI Updated Successfully');
       }
     } catch (e) {
@@ -421,14 +419,14 @@ class HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
+
     // Check if we need to refresh when building
     if (_needsRefresh && !_isLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _refreshFromDb();
       });
     }
-    
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
@@ -437,7 +435,7 @@ class HomeScreenState extends State<HomeScreen>
           Positioned(
             child: Image.asset(AppImages.curvedBackground, fit: BoxFit.cover),
           ),
-          
+
           SafeArea(
             child: RefreshIndicator(
               onRefresh: _refreshFromDb,
@@ -494,9 +492,9 @@ class HomeScreenState extends State<HomeScreen>
                           ),
                         ],
                       ),
-                      
+
                       const SizedBox(height: 20),
-                      
+
                       // Balance Card
                       AnimatedBuilder(
                         animation: _bobAnimation,
@@ -511,9 +509,10 @@ class HomeScreenState extends State<HomeScreen>
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => const FilteredTransactionsScreen(
-                                  type: 'All',
-                                ),
+                                builder: (_) =>
+                                    const FilteredTransactionsScreen(
+                                      type: 'All',
+                                    ),
                               ),
                             ).then((_) => _refreshFromDb());
                           },
@@ -523,7 +522,7 @@ class HomeScreenState extends State<HomeScreen>
                               gradient: LinearGradient(
                                 colors: [
                                   AppColors.primary,
-                                  AppColors.primary.withOpacity(0.8),
+                                  AppColors.primary.withValues(alpha: 0.8),
                                 ],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
@@ -531,7 +530,9 @@ class HomeScreenState extends State<HomeScreen>
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppColors.primary.withOpacity(0.3),
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.3,
+                                  ),
                                   blurRadius: 15,
                                   offset: const Offset(0, 8),
                                 ),
@@ -550,9 +551,14 @@ class HomeScreenState extends State<HomeScreen>
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  FormatUtils.formatCurrency(_totalBalance, compact: false),
+                                  FormatUtils.formatCurrency(
+                                    _totalBalance,
+                                    compact: false,
+                                  ),
                                   style: TextStyle(
-                                    color: _totalBalance >= 0 ? Colors.white : Colors.red.shade300,
+                                    color: _totalBalance >= 0
+                                        ? Colors.white
+                                        : Colors.red.shade300,
                                     fontSize: 32,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -584,9 +590,9 @@ class HomeScreenState extends State<HomeScreen>
                           ),
                         ),
                       ),
-                      
+
                       const SizedBox(height: 24),
-                      
+
                       // Transactions Section
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -605,9 +611,10 @@ class HomeScreenState extends State<HomeScreen>
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const FilteredTransactionsScreen(
-                                      type: 'All',
-                                    ),
+                                    builder: (_) =>
+                                        const FilteredTransactionsScreen(
+                                          type: 'All',
+                                        ),
                                   ),
                                 ).then((_) => _refreshFromDb());
                               },
@@ -615,9 +622,9 @@ class HomeScreenState extends State<HomeScreen>
                             ),
                         ],
                       ),
-                      
+
                       const SizedBox(height: 12),
-                      
+
                       // Transaction List
                       if (_isLoading)
                         const Center(
@@ -701,7 +708,7 @@ class HomeScreenState extends State<HomeScreen>
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.2),
+          color: Colors.white.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -709,7 +716,7 @@ class HomeScreenState extends State<HomeScreen>
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.3),
+                color: Colors.white.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, color: Colors.white, size: 16),
@@ -721,10 +728,7 @@ class HomeScreenState extends State<HomeScreen>
                 children: [
                   Text(
                     label,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                   Text(
                     FormatUtils.formatCurrency(value, compact: false),
@@ -746,7 +750,7 @@ class HomeScreenState extends State<HomeScreen>
   Widget _buildTransactionTile(Map<String, dynamic> tx) {
     final isIncome = (tx['type'] as String).toLowerCase() == 'income';
     final color = isIncome ? AppColors.income : AppColors.expense;
-    
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
       child: Material(
@@ -771,12 +775,15 @@ class HomeScreenState extends State<HomeScreen>
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
                     tx['icon'] != null
-                        ? IconData(tx['icon'] as int, fontFamily: 'MaterialIcons')
+                        ? IconData(
+                            tx['icon'] as int,
+                            fontFamily: 'MaterialIcons',
+                          )
                         : _iconForNote(tx['note'] as String?),
                     color: color,
                     size: 24,

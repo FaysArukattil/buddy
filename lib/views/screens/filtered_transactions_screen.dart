@@ -124,8 +124,9 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
     final filtered = _allRows.where((r) {
       final type = (r['type'] as String?)?.toLowerCase().trim() ?? '';
       if (widget.type.toLowerCase().trim() != 'all' &&
-          widget.type.toLowerCase().trim() != type)
+          widget.type.toLowerCase().trim() != type) {
         return false;
+      }
 
       final dateStr = r['date'] as String?;
       if (dateStr == null) return false;

@@ -775,7 +775,7 @@ class StatisticsScreenState extends State<StatisticsScreen>
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -806,12 +806,15 @@ class StatisticsScreenState extends State<StatisticsScreen>
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)],
+                colors: [
+                  AppColors.primary,
+                  AppColors.primary.withValues(alpha: 0.8),
+                ],
               ),
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primary.withOpacity(0.3),
+                  color: AppColors.primary.withValues(alpha: 0.3),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -881,7 +884,7 @@ class StatisticsScreenState extends State<StatisticsScreen>
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.06),
+                color: Colors.black.withValues(alpha: 0.06),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -912,12 +915,12 @@ class StatisticsScreenState extends State<StatisticsScreen>
                         borderRadius: BorderRadius.circular(12),
                         gradient: LinearGradient(
                           colors: [
-                            AppColors.primary.withOpacity(0.38),
-                            AppColors.secondary.withOpacity(0.30),
+                            AppColors.primary.withValues(alpha: 0.38),
+                            AppColors.secondary.withValues(alpha: 0.30),
                           ],
                         ),
                         border: Border.all(
-                          color: AppColors.secondary.withOpacity(0.35),
+                          color: AppColors.secondary.withValues(alpha: 0.35),
                           width: 1,
                         ),
                       ),
@@ -975,7 +978,7 @@ class StatisticsScreenState extends State<StatisticsScreen>
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -1030,12 +1033,12 @@ class StatisticsScreenState extends State<StatisticsScreen>
                         borderRadius: BorderRadius.circular(12),
                         gradient: LinearGradient(
                           colors: [
-                            AppColors.primary.withOpacity(0.38),
-                            AppColors.secondary.withOpacity(0.30),
+                            AppColors.primary.withValues(alpha: 0.38),
+                            AppColors.secondary.withValues(alpha: 0.30),
                           ],
                         ),
                         border: Border.all(
-                          color: AppColors.secondary.withOpacity(0.35),
+                          color: AppColors.secondary.withValues(alpha: 0.35),
                           width: 1,
                         ),
                       ),
@@ -1127,7 +1130,7 @@ class StatisticsScreenState extends State<StatisticsScreen>
             colors: [
               _type == 'Income' ? AppColors.income : AppColors.expense,
               (_type == 'Income' ? AppColors.income : AppColors.expense)
-                  .withOpacity(0.7),
+                  .withValues(alpha: (0.7)),
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -1136,7 +1139,7 @@ class StatisticsScreenState extends State<StatisticsScreen>
           boxShadow: [
             BoxShadow(
               color: (_type == 'Income' ? AppColors.income : AppColors.expense)
-                  .withOpacity(0.3),
+                  .withValues(alpha: 0.3),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -1160,7 +1163,7 @@ class StatisticsScreenState extends State<StatisticsScreen>
                 Text(
                   _tabs[_selectedTab],
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                     fontSize: 12,
                   ),
                 ),
@@ -1199,7 +1202,7 @@ class StatisticsScreenState extends State<StatisticsScreen>
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withOpacity(0.1),
+                color: AppColors.primary.withValues(alpha: 0.1),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -1264,18 +1267,18 @@ class StatisticsScreenState extends State<StatisticsScreen>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Colors.white.withOpacity(0.95),
-                  Colors.white.withOpacity(0.85),
+                  Colors.white.withValues(alpha: 0.95),
+                  Colors.white.withValues(alpha: 0.85),
                 ],
               ),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: Colors.white.withOpacity(0.5),
+                color: Colors.white.withValues(alpha: 0.5),
                 width: 1.5,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primary.withOpacity(0.1),
+                  color: AppColors.primary.withValues(alpha: 0.1),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -1424,7 +1427,7 @@ class StatisticsScreenState extends State<StatisticsScreen>
                                 (_type == 'Income'
                                         ? AppColors.income
                                         : AppColors.expense)
-                                    .withOpacity(0.6),
+                                    .withValues(alpha: 0.6),
                               ],
                               begin: Alignment.bottomCenter,
                               end: Alignment.topCenter,
@@ -1491,7 +1494,7 @@ class StatisticsScreenState extends State<StatisticsScreen>
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -1506,7 +1509,7 @@ class StatisticsScreenState extends State<StatisticsScreen>
                           (_type == 'Income'
                                   ? AppColors.income
                                   : AppColors.expense)
-                              .withOpacity(0.1),
+                              .withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(

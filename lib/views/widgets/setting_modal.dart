@@ -383,8 +383,8 @@ class _SettingsModalState extends State<SettingsModal> {
                   decoration: BoxDecoration(
                     border: Border.all(
                       color: _autoDetectionEnabled
-                          ? AppColors.primary.withOpacity(0.3)
-                          : Colors.grey.withOpacity(0.3),
+                          ? AppColors.primary.withValues(alpha: .3)
+                          : Colors.grey.withValues(alpha: 0.3),
                       width: 1.5,
                     ),
                     borderRadius: BorderRadius.circular(14),
@@ -396,7 +396,7 @@ class _SettingsModalState extends State<SettingsModal> {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.12),
+                              color: AppColors.primary.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Icon(
@@ -536,9 +536,9 @@ class _SettingsModalState extends State<SettingsModal> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withOpacity(0.3)),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
           ),
           child: Text(
             status,
@@ -569,7 +569,7 @@ class _SettingsModalState extends State<SettingsModal> {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            border: Border.all(color: color.withOpacity(0.3), width: 1.5),
+            border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
             borderRadius: BorderRadius.circular(14),
           ),
           child: Row(
@@ -577,7 +577,7 @@ class _SettingsModalState extends State<SettingsModal> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, color: color, size: 22),
