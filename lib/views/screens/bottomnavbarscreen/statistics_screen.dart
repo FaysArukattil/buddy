@@ -873,29 +873,30 @@ class StatisticsScreenState extends State<StatisticsScreen>
           });
           _scheduleComputation();
         },
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final totalWidth = constraints.maxWidth;
-            const itemCount = 4;
-            final itemWidth = totalWidth / itemCount;
-            final indicatorWidth = itemWidth - 12;
-            final animatedLeft =
-                (_tabPage.clamp(0, itemCount - 1) * itemWidth) + 6;
-
-            return Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+        child: Container(
+          height: 52,
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
-              child: Stack(
+            ],
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final totalWidth = constraints.maxWidth;
+              const itemCount = 4;
+              final itemWidth = totalWidth / itemCount;
+              final indicatorWidth = itemWidth - 8; // Reduced padding
+              final animatedLeft =
+                  (_tabPage.clamp(0, itemCount - 1) * itemWidth) + 4;
+
+              return Stack(
                 children: [
                   AnimatedPositioned(
                     duration: _tabDragging
@@ -904,8 +905,8 @@ class StatisticsScreenState extends State<StatisticsScreen>
                     curve: Curves.easeOut,
                     left: animatedLeft,
                     top: 0,
+                    bottom: 0,
                     width: indicatorWidth,
-                    height: 44,
                     child: Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
@@ -919,13 +920,6 @@ class StatisticsScreenState extends State<StatisticsScreen>
                           color: AppColors.secondary.withOpacity(0.35),
                           width: 1,
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withOpacity(0.2),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
                       ),
                     ),
                   ),
@@ -934,7 +928,7 @@ class StatisticsScreenState extends State<StatisticsScreen>
                       final distance = (_tabPage - i).abs();
                       final selected = distance < 0.5;
                       return Expanded(
-                        child: GestureDetector(
+                        child: InkWell(
                           onTap: () {
                             setState(() {
                               _selectedTab = i;
@@ -943,11 +937,9 @@ class StatisticsScreenState extends State<StatisticsScreen>
                             });
                             _scheduleComputation();
                           },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Center(
                             child: Text(
                               _tabs[i],
-                              textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: selected
                                     ? Colors.white
@@ -964,9 +956,9 @@ class StatisticsScreenState extends State<StatisticsScreen>
                     }),
                   ),
                 ],
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -975,51 +967,53 @@ class StatisticsScreenState extends State<StatisticsScreen>
   Widget _buildSwipeableTypeToggle() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0),
-      child: GestureDetector(
-        onHorizontalDragStart: (details) {
-          setState(() {
-            _typeDragging = true;
-            _typeDragStartPage = _typePage;
-            _typeDragStartX = details.globalPosition.dx;
-          });
-        },
-        onHorizontalDragUpdate: (details) {
-          final screenWidth = MediaQuery.of(context).size.width - 40;
-          final itemWidth = screenWidth / 2;
-          final deltaX = details.globalPosition.dx - _typeDragStartX;
-          final deltaPages = deltaX / itemWidth;
-          setState(() {
-            _typePage = (_typeDragStartPage + deltaPages).clamp(0.0, 1.0);
-          });
-        },
-        onHorizontalDragEnd: (details) {
-          final target = _typePage.round();
-          setState(() {
-            _typeDragging = false;
-            _typePage = target.toDouble();
-            _type = target == 0 ? 'Expense' : 'Income';
-          });
-          _scheduleComputation();
-        },
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final totalWidth = constraints.maxWidth;
             const itemCount = 2;
             final itemWidth = totalWidth / itemCount;
-            final indicatorWidth = itemWidth - 12;
+            final indicatorWidth = itemWidth - 8;
             final animatedLeft =
-                (_typePage.clamp(0, itemCount - 1) * itemWidth) + 6;
+                (_typePage.clamp(0, itemCount - 1) * itemWidth) + 4;
 
-            return Container(
-              height: 50,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.14),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: AppColors.secondary.withOpacity(0.24),
-                  width: 1,
-                ),
-              ),
+            return GestureDetector(
+              onHorizontalDragStart: (details) {
+                setState(() {
+                  _typeDragging = true;
+                  _typeDragStartPage = _typePage;
+                  _typeDragStartX = details.globalPosition.dx;
+                });
+              },
+              onHorizontalDragUpdate: (details) {
+                final deltaX = details.globalPosition.dx - _typeDragStartX;
+                final deltaPages = deltaX / itemWidth;
+                setState(() {
+                  _typePage = (_typeDragStartPage + deltaPages).clamp(0.0, 1.0);
+                });
+              },
+              onHorizontalDragEnd: (details) {
+                final target = _typePage.round();
+                setState(() {
+                  _typeDragging = false;
+                  _typePage = target.toDouble();
+                  _type = target == 0 ? 'Expense' : 'Income';
+                });
+                _scheduleComputation();
+              },
               child: Stack(
                 children: [
                   AnimatedPositioned(
@@ -1028,9 +1022,9 @@ class StatisticsScreenState extends State<StatisticsScreen>
                         : const Duration(milliseconds: 200),
                     curve: Curves.easeOut,
                     left: animatedLeft,
-                    top: 4,
+                    top: 0,
+                    bottom: 0,
                     width: indicatorWidth,
-                    height: 42,
                     child: Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
@@ -1044,21 +1038,16 @@ class StatisticsScreenState extends State<StatisticsScreen>
                           color: AppColors.secondary.withOpacity(0.35),
                           width: 1,
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withOpacity(0.2),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
                       ),
                     ),
                   ),
                   Row(
                     children: [
                       Expanded(
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(12),
+                        child: _buildTypeOption(
+                          icon: Icons.trending_down_rounded,
+                          text: 'Expense',
+                          selected: _typePage < 0.5,
                           onTap: () {
                             setState(() {
                               _type = 'Expense';
@@ -1066,39 +1055,13 @@ class StatisticsScreenState extends State<StatisticsScreen>
                             });
                             _scheduleComputation();
                           },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.trending_down_rounded,
-                                  color: _typePage < 0.5
-                                      ? AppColors.expense
-                                      : AppColors.textSecondary,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Expense',
-                                  style: TextStyle(
-                                    color: _typePage < 0.5
-                                        ? Colors.white
-                                        : AppColors.textSecondary,
-                                    fontWeight: _typePage < 0.5
-                                        ? FontWeight.bold
-                                        : FontWeight.w600,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                         ),
                       ),
                       Expanded(
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(12),
+                        child: _buildTypeOption(
+                          icon: Icons.trending_up_rounded,
+                          text: 'Income',
+                          selected: _typePage >= 0.5,
                           onTap: () {
                             setState(() {
                               _type = 'Income';
@@ -1106,34 +1069,6 @@ class StatisticsScreenState extends State<StatisticsScreen>
                             });
                             _scheduleComputation();
                           },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.trending_up_rounded,
-                                  color: _typePage >= 0.5
-                                      ? AppColors.income
-                                      : AppColors.textSecondary,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Income',
-                                  style: TextStyle(
-                                    color: _typePage >= 0.5
-                                        ? Colors.white
-                                        : AppColors.textSecondary,
-                                    fontWeight: _typePage >= 0.5
-                                        ? FontWeight.bold
-                                        : FontWeight.w600,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                         ),
                       ),
                     ],
@@ -1142,6 +1077,41 @@ class StatisticsScreenState extends State<StatisticsScreen>
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTypeOption({
+    required IconData icon,
+    required String text,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        color: Colors.transparent,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: selected
+                  ? (text == 'Income' ? AppColors.income : AppColors.expense)
+                  : AppColors.textSecondary,
+              size: 40,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              text,
+              style: TextStyle(
+                color: selected ? Colors.white : AppColors.textSecondary,
+                fontWeight: selected ? FontWeight.bold : FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ],
         ),
       ),
     );
