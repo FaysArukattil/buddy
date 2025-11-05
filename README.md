@@ -5,7 +5,6 @@
   
   ![Flutter](https://img.shields.io/badge/Flutter-3.9.2+-02569B?logo=flutter)
   ![Dart](https://img.shields.io/badge/Dart-3.9.2+-0175C2?logo=dart)
-  ![License](https://img.shields.io/badge/License-MIT-green.svg)
   ![Platform](https://img.shields.io/badge/Platform-Android-brightgreen)
   
   **Your intelligent companion for effortless expense management**
@@ -194,9 +193,9 @@ RegExp amountRegex = RegExp(r'(?:Rs\.?|₹)\s?([0-9,]+\.?[0-9]*)');
 <div align="center">
   <table>
     <tr>
-      <td><img src="screenshots/home.png" width="250" alt="Home Screen"/></td>
-      <td><img src="screenshots/statistics.png" width="250" alt="Statistics"/></td>
-      <td><img src="screenshots/profile.png" width="250" alt="Profile"/></td>
+      <td><img src="screenshots/homescreen.jpeg" width="250" alt="Home Screen"/></td>
+      <td><img src="screenshots/statistics.jpeg" width="250" alt="Statistics"/></td>
+      <td><img src="screenshots/profile.jpeg" width="250" alt="Profile"/></td>
     </tr>
     <tr>
       <td align="center"><b>Home Screen</b></td>
@@ -204,14 +203,18 @@ RegExp amountRegex = RegExp(r'(?:Rs\.?|₹)\s?([0-9,]+\.?[0-9]*)');
       <td align="center"><b>Profile</b></td>
     </tr>
     <tr>
-      <td><img src="screenshots/add_transaction.png" width="250" alt="Add Transaction"/></td>
-      <td><img src="screenshots/detail.png" width="250" alt="Transaction Detail"/></td>
-      <td><img src="screenshots/settings.png" width="250" alt="Settings"/></td>
+      <td><img src="screenshots/add_transaction.jpeg" width="250" alt="Add Transaction"/></td>
+      <td><img src="screenshots/Transaction_detail.jpeg" width="250" alt="Transaction Detail"/></td>
+      <td><img src="screenshots/settings.jpeg" width="250" alt="Settings"/></td>
+      <td><img src="screenshots/all_transaction.jpeg" width="250" alt="Settings"/></td>
     </tr>
     <tr>
       <td align="center"><b>Add Transaction</b></td>
       <td align="center"><b>Details View</b></td>
       <td align="center"><b>Settings</b></td>
+            <td align="center"><b>All Transactions</b></td>
+
+
     </tr>
   </table>
 </div>
