@@ -31,8 +31,9 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
   // Drag state for real-time preview
   double _dragOffset = 0.0;
   bool _isDragging = false;
-  DateTime? _targetDate;
-  DateTime? _targetMonth;
+  DateTime? _previewDate;
+  DateTime? _previewMonth;
+  bool _previewLoaded = false;
 
   // Animation controllers
   late AnimationController _slideController;
@@ -171,12 +172,7 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
     }).toList();
   }
 
-  void _filterByMonth() {
-    final transactions = _getFilteredTransactions(
-      _showingToday ? _selectedDate : _currentMonth,
-      _showingToday,
-    );
-
+  double _calculateTotal(List<Map<String, dynamic>> transactions) {
     double total = 0;
     for (var tx in transactions) {
       final type = (tx['type'] as String).toLowerCase().trim();
@@ -187,11 +183,28 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
         total -= amt;
       }
     }
+    return total;
+  }
+
+  void _filterByMonth() {
+    final transactions = _getFilteredTransactions(
+      _showingToday ? _selectedDate : _currentMonth,
+      _showingToday,
+    );
 
     setState(() {
       _displayedTransactions = transactions;
-      _total = total;
+      _total = _calculateTotal(transactions);
     });
+  }
+
+  void _resetDragState() {
+    _dragOffset = 0.0;
+    _isDragging = false;
+    _nextTransactions = [];
+    _previewDate = null;
+    _previewMonth = null;
+    _previewLoaded = false;
   }
 
   // Real-time drag preview handlers
@@ -200,31 +213,35 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
     setState(() {
       _isDragging = true;
       _dragOffset = 0.0;
+      _previewLoaded = false;
     });
   }
 
   void _onHorizontalDragUpdate(DragUpdateDetails details) {
     if (_isTransitioning) return;
+
     setState(() {
       _dragOffset += details.delta.dx;
 
-      // Preload next/previous transactions when dragging
-      if (_dragOffset.abs() > 50 && _nextTransactions.isEmpty) {
+      // Load preview data when drag exceeds threshold
+      if (_dragOffset.abs() > 30 && !_previewLoaded) {
         final isNext = _dragOffset < 0;
+
         if (_showingToday) {
-          _targetDate = DateTime(
+          _previewDate = DateTime(
             _selectedDate.year,
             _selectedDate.month,
             _selectedDate.day + (isNext ? 1 : -1),
           );
-          _nextTransactions = _getFilteredTransactions(_targetDate!, true);
+          _nextTransactions = _getFilteredTransactions(_previewDate!, true);
         } else {
-          _targetMonth = DateTime(
+          _previewMonth = DateTime(
             _currentMonth.year,
             _currentMonth.month + (isNext ? 1 : -1),
           );
-          _nextTransactions = _getFilteredTransactions(_targetMonth!, false);
+          _nextTransactions = _getFilteredTransactions(_previewMonth!, false);
         }
+        _previewLoaded = true;
       }
     });
   }
@@ -232,33 +249,62 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
   void _onHorizontalDragEnd(DragEndDetails details) {
     if (_isTransitioning) return;
 
-    final threshold = MediaQuery.of(context).size.width * 0.3;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final threshold = screenWidth * 0.25;
     final velocity = details.primaryVelocity ?? 0;
+    final velocityThreshold = 800;
 
-    if (_dragOffset.abs() > threshold || velocity.abs() > 500) {
-      // Complete the swipe with animation
-      final isNext = _dragOffset < 0 || velocity < -500;
+    // Determine if swipe should complete
+    final shouldComplete =
+        _dragOffset.abs() > threshold || velocity.abs() > velocityThreshold;
+
+    if (shouldComplete && _previewLoaded) {
+      // Determine direction
+      final isNext =
+          _dragOffset < 0 ||
+          (velocity.abs() > velocityThreshold && velocity < 0);
       _completeSwipeWithAnimation(isNext);
     } else {
       // Cancel the swipe
       setState(() {
-        _dragOffset = 0.0;
-        _isDragging = false;
-        _nextTransactions = [];
-        _targetDate = null;
-        _targetMonth = null;
+        _resetDragState();
       });
     }
   }
 
   void _completeSwipeWithAnimation(bool isNext) {
+    if (!_previewLoaded) return;
+
     HapticFeedback.mediumImpact();
     _indicatorController.forward(from: 0);
+
+    // Recalculate target date/month and data to ensure correctness
+    final DateTime? targetDate;
+    final DateTime? targetMonth;
+    final List<Map<String, dynamic>> targetTransactions;
+
+    if (_showingToday) {
+      targetDate = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day + (isNext ? 1 : -1),
+      );
+      targetMonth = null;
+      targetTransactions = _getFilteredTransactions(targetDate, true);
+    } else {
+      targetDate = null;
+      targetMonth = DateTime(
+        _currentMonth.year,
+        _currentMonth.month + (isNext ? 1 : -1),
+      );
+      targetTransactions = _getFilteredTransactions(targetMonth, false);
+    }
 
     setState(() {
       _isTransitioning = true;
       _isSwipingNext = isNext;
       _isDragging = false;
+      _nextTransactions = targetTransactions;
     });
 
     _updateSlideAnimations(isNext);
@@ -267,42 +313,16 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
       if (!mounted) return;
 
       setState(() {
-        if (_showingToday) {
-          _selectedDate =
-              _targetDate ??
-              DateTime(
-                _selectedDate.year,
-                _selectedDate.month,
-                _selectedDate.day + (isNext ? 1 : -1),
-              );
-        } else {
-          _currentMonth =
-              _targetMonth ??
-              DateTime(
-                _currentMonth.year,
-                _currentMonth.month + (isNext ? 1 : -1),
-              );
+        if (_showingToday && targetDate != null) {
+          _selectedDate = targetDate;
+        } else if (!_showingToday && targetMonth != null) {
+          _currentMonth = targetMonth;
         }
 
-        // Calculate total for new transactions
-        double total = 0;
-        for (var tx in _nextTransactions) {
-          final type = (tx['type'] as String).toLowerCase().trim();
-          final amt = tx['amount'] as double;
-          if (type == 'income') {
-            total += amt;
-          } else if (type == 'expense') {
-            total -= amt;
-          }
-        }
-
-        _displayedTransactions = _nextTransactions;
-        _total = total;
-        _dragOffset = 0.0;
-        _nextTransactions = [];
-        _targetDate = null;
-        _targetMonth = null;
+        _displayedTransactions = targetTransactions;
+        _total = _calculateTotal(targetTransactions);
         _isTransitioning = false;
+        _resetDragState();
       });
       _slideController.reset();
     });
@@ -320,11 +340,12 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
       _currentMonth.month + (isNext ? 1 : -1),
     );
 
-    _nextTransactions = _getFilteredTransactions(nextMonth, false);
+    final nextTransactions = _getFilteredTransactions(nextMonth, false);
 
     setState(() {
       _isTransitioning = true;
       _isSwipingNext = isNext;
+      _nextTransactions = nextTransactions;
     });
 
     _updateSlideAnimations(isNext);
@@ -333,20 +354,10 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
       if (!mounted) return;
       setState(() {
         _currentMonth = nextMonth;
-        _displayedTransactions = _nextTransactions;
-
-        double total = 0;
-        for (var tx in _displayedTransactions) {
-          final type = (tx['type'] as String).toLowerCase().trim();
-          final amt = tx['amount'] as double;
-          if (type == 'income') {
-            total += amt;
-          } else if (type == 'expense') {
-            total -= amt;
-          }
-        }
-        _total = total;
+        _displayedTransactions = nextTransactions;
+        _total = _calculateTotal(nextTransactions);
         _isTransitioning = false;
+        _resetDragState();
       });
       _slideController.reset();
     });
@@ -364,11 +375,12 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
       _selectedDate.day + (isNext ? 1 : -1),
     );
 
-    _nextTransactions = _getFilteredTransactions(nextDate, true);
+    final nextTransactions = _getFilteredTransactions(nextDate, true);
 
     setState(() {
       _isTransitioning = true;
       _isSwipingNext = isNext;
+      _nextTransactions = nextTransactions;
     });
 
     _updateSlideAnimations(isNext);
@@ -377,20 +389,10 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
       if (!mounted) return;
       setState(() {
         _selectedDate = nextDate;
-        _displayedTransactions = _nextTransactions;
-
-        double total = 0;
-        for (var tx in _displayedTransactions) {
-          final type = (tx['type'] as String).toLowerCase().trim();
-          final amt = tx['amount'] as double;
-          if (type == 'income') {
-            total += amt;
-          } else if (type == 'expense') {
-            total -= amt;
-          }
-        }
-        _total = total;
+        _displayedTransactions = nextTransactions;
+        _total = _calculateTotal(nextTransactions);
         _isTransitioning = false;
+        _resetDragState();
       });
       _slideController.reset();
     });
@@ -477,6 +479,7 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
       } else {
         _currentMonth = DateTime.now();
       }
+      _resetDragState();
     });
     _filterByMonth();
   }
@@ -1044,7 +1047,7 @@ class _FilteredTransactionsScreenState extends State<FilteredTransactionsScreen>
                         ),
 
                       // Next/Previous transactions preview
-                      if (_isDragging && _nextTransactions.isNotEmpty)
+                      if (_isDragging && _previewLoaded)
                         Transform.translate(
                           offset: Offset(
                             _dragOffset < 0
