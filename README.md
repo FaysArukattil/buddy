@@ -213,14 +213,12 @@ RegExp amountRegex = RegExp(r'(?:Rs\.?|₹)\s?([0-9,]+\.?[0-9]*)');
       <td align="center"><b>Details View</b></td>
       <td align="center"><b>Settings</b></td>
             <td align="center"><b>All Transactions</b></td>
-
-
     </tr>
   </table>
 </div>
 
 ---
-
+S
 ## 📦 Dependencies
 
 ### Core Dependencies
