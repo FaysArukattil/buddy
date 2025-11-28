@@ -1,8 +1,11 @@
+// ProfileScreen - Initially shows Google photo, then allows custom upload to local storage
+
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:buddy/utils/colors.dart';
 import 'package:buddy/utils/images.dart';
@@ -26,8 +29,10 @@ class ProfileScreenState extends State<ProfileScreen>
   final _nameController = TextEditingController();
   final FocusNode _nameFocus = FocusNode();
   String _email = '';
-  String? _imagePath;
+  String? _customImagePath; // Local file path for custom image
+  String? _googlePhotoUrl; // Google account photo URL
   bool _editing = false;
+  bool _uploadingImage = false;
   double _totalIncome = 0;
   double _totalExpense = 0;
   double _moneyLottieDy = 0;
@@ -59,68 +64,201 @@ class ProfileScreenState extends State<ProfileScreen>
   }
 
   Future<void> _loadProfile() async {
-    final prefs = await SharedPreferences.getInstance();
-    final email = prefs.getString('email') ?? '';
-    final savedName = prefs.getString('name');
-    final imgPath = prefs.getString('profile_image_path');
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final user = FirebaseAuth.instance.currentUser;
 
-    // Load current month totals from database (like Current Balance)
-    final repo = TransactionRepository();
-    final rows = await repo.getAll();
-    final now = DateTime.now();
-    double income = 0, expense = 0;
-    for (final r in rows) {
-      final dt = DateTime.tryParse(r['date'] as String) ?? now;
-      // Only count transactions from current month
-      if (dt.year == now.year && dt.month == now.month) {
-        final amt = (r['amount'] as num).toDouble();
-        final type = (r['type'] as String).toLowerCase().trim();
-        if (type == 'income') {
-          income += amt;
-        } else if (type == 'expense') {
-          expense += amt;
+      print('=== Loading Profile ===');
+      print('User: ${user?.email}');
+      print('Google Photo: ${user?.photoURL}');
+
+      // Load saved data
+      final savedName = prefs.getString('name');
+      final customImagePath = prefs.getString('profile_image_path');
+
+      print('Saved Name: $savedName');
+      print('Custom Image Path: $customImagePath');
+
+      // Validate custom image path if it exists
+      String? validCustomPath;
+      if (customImagePath != null && customImagePath.isNotEmpty) {
+        final file = File(customImagePath);
+        if (await file.exists()) {
+          validCustomPath = customImagePath;
+          print('Custom image file exists');
+        } else {
+          await prefs.remove('profile_image_path');
+          print('Custom image file not found, removed from preferences');
         }
       }
-    }
 
-    String displayName = savedName ?? '';
-    if (displayName.isEmpty && email.isNotEmpty) {
-      displayName = email.contains('@') ? email.split('@').first : email;
-      if (displayName.isNotEmpty) {
-        displayName = displayName[0].toUpperCase() + displayName.substring(1);
+      // Get user data from Firebase Auth
+      final email = user?.email ?? prefs.getString('email') ?? '';
+      final googlePhotoUrl = user?.photoURL;
+
+      // Generate display name
+      String displayName = savedName ?? user?.displayName ?? '';
+      if (displayName.isEmpty && email.isNotEmpty) {
+        displayName = email.contains('@') ? email.split('@').first : email;
+        if (displayName.isNotEmpty) {
+          displayName = displayName[0].toUpperCase() + displayName.substring(1);
+        }
+      }
+
+      // Load transaction data
+      final repo = TransactionRepository();
+      final rows = await repo.getAll();
+      final now = DateTime.now();
+      double income = 0, expense = 0;
+
+      for (final r in rows) {
+        final dt = DateTime.tryParse(r['date'] as String) ?? now;
+        if (dt.year == now.year && dt.month == now.month) {
+          final amt = (r['amount'] as num).toDouble();
+          final type = (r['type'] as String).toLowerCase().trim();
+          if (type == 'income') {
+            income += amt;
+          } else if (type == 'expense') {
+            expense += amt;
+          }
+        }
+      }
+
+      // Load auto-detection settings
+      await NotificationService.isAutoDetectionEnabled();
+      await repo.getAutoDetectedTransactions();
+
+      // Update UI
+      if (mounted) {
+        setState(() {
+          _email = email;
+          _nameController.text = displayName;
+          _customImagePath = validCustomPath;
+          _googlePhotoUrl = googlePhotoUrl;
+          _totalIncome = income;
+          _totalExpense = expense;
+        });
+        print(
+          'Profile loaded - Custom: $_customImagePath, Google: $_googlePhotoUrl',
+        );
+      }
+    } catch (e) {
+      print('Error loading profile: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load profile: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
-
-    // Load auto-detection settings
-    await NotificationService.isAutoDetectionEnabled();
-    await repo.getAutoDetectedTransactions();
-
-    setState(() {
-      _email = email;
-      _nameController.text = displayName;
-      _imagePath = imgPath;
-      _totalIncome = income;
-      _totalExpense = expense;
-    });
   }
 
   Future<void> _pickImage(ImageSource source) async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: source, imageQuality: 85);
-    if (picked != null) {
-      if (!mounted) return;
-      setState(() => _imagePath = picked.path);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('profile_image_path', picked.path);
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 800,
+        maxHeight: 800,
+      );
+
+      if (picked == null) return;
+
+      print('=== Image Picked ===');
+      print('Path: ${picked.path}');
+
+      // Verify file exists
+      final file = File(picked.path);
+      final exists = await file.exists();
+      print('File exists: $exists');
+
+      if (exists) {
+        // Save to SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('profile_image_path', picked.path);
+
+        // Verify it was saved
+        final savedPath = prefs.getString('profile_image_path');
+        print('Verified saved path: $savedPath');
+
+        if (mounted) {
+          setState(() => _customImagePath = picked.path);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Profile picture updated successfully!'),
+              backgroundColor: AppColors.secondary,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        throw Exception('Picked file does not exist');
+      }
+    } catch (e) {
+      print('Error picking image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update profile picture: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
+  }
+
+  Widget _buildProfileImage() {
+    // Priority: Custom local image > Google photo > Default icon
+
+    // 1. Show custom local image if available
+    if (_customImagePath != null && _customImagePath!.isNotEmpty) {
+      return CircleAvatar(
+        radius: 41,
+        backgroundColor: Colors.grey[100],
+        backgroundImage: FileImage(File(_customImagePath!)),
+        onBackgroundImageError: (exception, stackTrace) {
+          print('Error loading custom image: $exception');
+        },
+      );
+    }
+
+    // 2. Show Google photo if available
+    if (_googlePhotoUrl != null && _googlePhotoUrl!.isNotEmpty) {
+      return CircleAvatar(
+        radius: 41,
+        backgroundColor: Colors.grey[100],
+        backgroundImage: NetworkImage(_googlePhotoUrl!),
+        onBackgroundImageError: (exception, stackTrace) {
+          print('Error loading Google photo: $exception');
+        },
+      );
+    }
+
+    // 3. Fallback to default icon
+    return CircleAvatar(
+      radius: 41,
+      backgroundColor: Colors.grey[100],
+      child: Icon(
+        Icons.person_rounded,
+        size: 42,
+        color: AppColors.primary.withValues(alpha: 0.5),
+      ),
+    );
   }
 
   Future<void> _saveProfile() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('name', _nameController.text.trim());
-    if (_imagePath != null) {
-      await prefs.setString('profile_image_path', _imagePath!);
-    }
 
     if (!mounted) return;
 
@@ -185,7 +323,7 @@ class ProfileScreenState extends State<ProfileScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Profile Header Card - Compact
+                    // Profile Header Card
                     AnimatedBuilder(
                       animation: _headerBob,
                       builder: (context, child) {
@@ -237,6 +375,7 @@ class ProfileScreenState extends State<ProfileScreen>
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    // Profile Image with camera button
                                     Stack(
                                       clipBehavior: Clip.none,
                                       children: [
@@ -256,24 +395,7 @@ class ProfileScreenState extends State<ProfileScreen>
                                           child: CircleAvatar(
                                             radius: 44,
                                             backgroundColor: Colors.white,
-                                            child: CircleAvatar(
-                                              radius: 41,
-                                              backgroundColor: Colors.grey[100],
-                                              backgroundImage:
-                                                  _imagePath != null
-                                                  ? FileImage(File(_imagePath!))
-                                                  : null,
-                                              child: _imagePath == null
-                                                  ? Icon(
-                                                      Icons.person_rounded,
-                                                      size: 42,
-                                                      color: AppColors.primary
-                                                          .withValues(
-                                                            alpha: 0.5,
-                                                          ),
-                                                    )
-                                                  : null,
-                                            ),
+                                            child: _buildProfileImage(),
                                           ),
                                         ),
                                         Positioned(
@@ -319,6 +441,7 @@ class ProfileScreenState extends State<ProfileScreen>
 
                                     const SizedBox(height: 12),
 
+                                    // Name field
                                     AnimatedSwitcher(
                                       duration: const Duration(
                                         milliseconds: 300,
@@ -394,6 +517,7 @@ class ProfileScreenState extends State<ProfileScreen>
 
                                     const SizedBox(height: 6),
 
+                                    // Email
                                     Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 10,
@@ -434,6 +558,7 @@ class ProfileScreenState extends State<ProfileScreen>
                             ),
                           ),
 
+                          // Edit button
                           Positioned(
                             top: 10,
                             right: 10,
@@ -643,11 +768,6 @@ class ProfileScreenState extends State<ProfileScreen>
                       ),
                     ),
 
-                    const SizedBox(height: 30),
-
-                    const SizedBox(height: 30),
-
-                    // Data Management Section
                     const SizedBox(height: 30),
                   ],
                 ),

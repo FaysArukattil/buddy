@@ -8,6 +8,7 @@ import 'package:buddy/repositories/transaction_repository.dart';
 import 'package:buddy/views/widgets/setting_modal.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -187,11 +188,28 @@ class HomeScreenState extends State<HomeScreen>
 
   Future<void> _loadUser() async {
     final prefs = await SharedPreferences.getInstance();
+    final user = FirebaseAuth.instance.currentUser;
+
+    // Get saved name from SharedPreferences
     final savedName = prefs.getString('name')?.trim() ?? '';
-    final email = prefs.getString('email')?.trim() ?? '';
+
+    // Get email from Firebase Auth first, then fallback to SharedPreferences
+    final email = user?.email ?? prefs.getString('email')?.trim() ?? '';
+
+    debugPrint('👤 Loading user...');
+    debugPrint('   Saved Name: $savedName');
+    debugPrint('   Email: $email');
+    debugPrint('   Firebase Display Name: ${user?.displayName}');
 
     // Use the same logic as ProfileScreen to generate display name
     String displayName = savedName;
+
+    // If no saved name, try Firebase displayName (from Google sign-in)
+    if (displayName.isEmpty && user?.displayName != null) {
+      displayName = user!.displayName!;
+    }
+
+    // If still empty, generate from email
     if (displayName.isEmpty && email.isNotEmpty) {
       displayName = email.contains('@') ? email.split('@').first : email;
       if (displayName.isNotEmpty) {
@@ -204,7 +222,7 @@ class HomeScreenState extends State<HomeScreen>
       displayName = 'Guest';
     }
 
-    debugPrint('👤 Loaded user name: $displayName');
+    debugPrint('👤 Final display name: $displayName');
 
     if (mounted) {
       setState(() {
