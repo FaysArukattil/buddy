@@ -1,12 +1,10 @@
-// ignore_for_file: use_build_context_synchronously
-
-import 'package:buddy/views/screens/bottomnavbarscreen/bottom_navbar_screen.dart';
-import 'package:buddy/views/screens/onboarding/login_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:buddy/services/auth_service.dart';
+import 'package:buddy/views/screens/onboarding/login_screen.dart';
 import 'package:buddy/utils/colors.dart';
 import 'package:buddy/views/widgets/custom_button_filled.dart';
+import 'package:buddy/views/widgets/custom_button_outlined.dart';
 import 'package:buddy/views/widgets/auth_textfield.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -21,12 +19,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _authService = AuthService();
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-
-    // ✅ Revalidate confirm password when password changes
+    // Revalidate confirm password when password changes
     _passwordController.addListener(() {
       if (_confirmPasswordController.text.isNotEmpty) {
         _formKey.currentState?.validate();
@@ -44,21 +43,50 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Future<void> _handleSignUp() async {
-    if (_formKey.currentState!.validate()) {
-      final pref = await SharedPreferences.getInstance();
-      final name = _nameController.text;
-      final email = _emailController.text;
-      final password = _passwordController.text;
+    if (!_formKey.currentState!.validate()) return;
 
-      await pref.setString("name", name);
-      await pref.setString("email", email);
-      await pref.setString("password", password);
-      await pref.setBool('is_logged_in', true);
+    setState(() => _isLoading = true);
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => BottomNavbarScreen()),
+    try {
+      await _authService.signUpWithEmailPassword(
+        name: _nameController.text.trim(),
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
       );
+      // Navigation handled by AuthWrapper
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => _isLoading = true);
+
+    try {
+      await _authService.signInWithGoogle();
+      // Navigation handled by AuthWrapper
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -94,7 +122,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 32),
 
                   AuthTextField(
                     label: "Full Name",
@@ -186,17 +214,67 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     },
                   ),
 
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 32),
 
                   CustomButtonFilled(
-                    text: "Sign Up",
-                    onPressed: _handleSignUp,
+                    text: _isLoading ? "Creating Account..." : "Sign Up",
+                    onPressed: _isLoading ? () {} : _handleSignUp,
                     borderRadius: 16,
                   ),
 
                   const SizedBox(height: 24),
 
+                  // Divider with "Or"
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          height: 1,
+                          color: const Color(0xFFE8E8E8),
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          "OR",
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Container(
+                          height: 1,
+                          color: const Color(0xFFE8E8E8),
+                        ),
+                      ),
+                    ],
+                  ),
+
                   const SizedBox(height: 24),
+
+                  // Google Sign In Button
+                  CustomButtonOutlined(
+                    text: "Continue with Google",
+                    onPressed: _isLoading ? () {} : _handleGoogleSignIn,
+                    borderRadius: 16,
+                    icon: Image.asset(
+                      'assets/images/google_logo.png',
+                      height: 20,
+                      width: 20,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.g_mobiledata,
+                          size: 24,
+                          color: AppColors.secondary,
+                        );
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
 
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -213,7 +291,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           Navigator.pushReplacement(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => LoginScreen(),
+                              builder: (context) => const LoginScreen(),
                             ),
                           );
                         },

@@ -1,10 +1,10 @@
-import 'package:buddy/views/screens/bottomnavbarscreen/bottom_navbar_screen.dart';
-import 'package:buddy/views/screens/onboarding/signup_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:buddy/services/auth_service.dart';
+import 'package:buddy/views/screens/onboarding/signup_screen.dart';
 import 'package:buddy/utils/colors.dart';
 import 'package:buddy/views/widgets/custom_button_filled.dart';
+import 'package:buddy/views/widgets/custom_button_outlined.dart';
 import 'package:buddy/views/widgets/auth_textfield.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,6 +17,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _authService = AuthService();
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -26,40 +28,109 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
-    if (_formKey.currentState!.validate()) {
-      final pref = await SharedPreferences.getInstance();
-      final email = _emailController.text;
-      final password = _passwordController.text;
+    if (!_formKey.currentState!.validate()) return;
 
-      await pref.setString("email", email);
-      await pref.setString("password", password);
-      await pref.setBool('is_logged_in', true);
-      await pref.setBool('isGuest', false); // Not a guest
+    setState(() => _isLoading = true);
 
-      Navigator.pushReplacement(
-        // ignore: use_build_context_synchronously
-        context,
-        MaterialPageRoute(builder: (context) => const BottomNavbarScreen()),
+    try {
+      await _authService.signInWithEmailPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
       );
+      // Navigation handled by AuthWrapper
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => _isLoading = true);
+
+    try {
+      await _authService.signInWithGoogle();
+      // Navigation handled by AuthWrapper
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _handleGuestLogin() async {
-    final prefs = await SharedPreferences.getInstance();
+    setState(() => _isLoading = true);
 
-    // Save guest user data with consistent key names
-    await prefs.setBool('is_logged_in', true);
-    await prefs.setString('name', 'Guest User');
-    await prefs.setString('email', 'guest@buddy.app');
-    await prefs.setBool('isGuest', true);
+    try {
+      await _authService.signInAsGuest();
+      // Navigation handled by AuthWrapper
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
-    if (!mounted) return;
+  Future<void> _handleForgotPassword() async {
+    final email = _emailController.text.trim();
 
-    // Navigate to main screen
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const BottomNavbarScreen()),
-    );
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your email address'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    try {
+      await _authService.resetPassword(email);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Password reset email sent! Check your inbox.'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -95,7 +166,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 32),
 
                   // Email Field
                   AuthTextField(
@@ -145,44 +216,28 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 16),
 
-                  // Remember Me & Forgot Password
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const SizedBox(width: 8),
-                          const Text(
-                            "Remember Me",
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          // Navigate to forgot password
-                        },
-                        child: const Text(
-                          "Forgot Password?",
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppColors.secondary,
-                            fontWeight: FontWeight.w600,
-                          ),
+                  // Forgot Password
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: GestureDetector(
+                      onTap: _handleForgotPassword,
+                      child: const Text(
+                        "Forgot Password?",
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.secondary,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ],
+                    ),
                   ),
 
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 32),
 
                   // Login Button
                   CustomButtonFilled(
-                    text: "Log In",
-                    onPressed: _handleLogin,
+                    text: _isLoading ? "Logging in..." : "Log In",
+                    onPressed: _isLoading ? () {} : _handleLogin,
                     borderRadius: 16,
                   ),
 
@@ -197,10 +252,62 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: const Color(0xFFE8E8E8),
                         ),
                       ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          "OR",
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Container(
+                          height: 1,
+                          color: const Color(0xFFE8E8E8),
+                        ),
+                      ),
                     ],
                   ),
 
                   const SizedBox(height: 24),
+
+                  // Google Sign In Button
+                  CustomButtonOutlined(
+                    text: "Continue with Google",
+                    onPressed: _isLoading ? () {} : _handleGoogleSignIn,
+                    borderRadius: 16,
+                    icon: Image.asset(
+                      'assets/images/google_logo.png',
+                      height: 20,
+                      width: 20,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.g_mobiledata,
+                          size: 24,
+                          color: AppColors.secondary,
+                        );
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Guest Login Button
+                  CustomButtonOutlined(
+                    text: "Continue as Guest",
+                    onPressed: _isLoading ? () {} : _handleGuestLogin,
+                    borderRadius: 16,
+                    icon: const Icon(
+                      Icons.person_outline,
+                      size: 20,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
 
                   // Sign Up Link
                   Row(
@@ -236,28 +343,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
 
                   const SizedBox(height: 32),
-
-                  // Skip button for guest mode
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: _handleGuestLogin,
-                      icon: const Icon(
-                        Icons.arrow_forward_rounded,
-                        color: Colors.grey,
-                        size: 18,
-                      ),
-                      label: const Text(
-                        'Continue as Guest',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
                 ],
               ),
             ),
