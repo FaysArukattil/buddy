@@ -126,20 +126,36 @@ class AuthService {
         credential,
       );
 
-      // Check if this is a new user
-      if (userCredential.additionalUserInfo?.isNewUser ?? false) {
-        // Save user data to Firestore for new users
-        await _firestore.collection('users').doc(userCredential.user!.uid).set({
-          'name': userCredential.user!.displayName ?? 'User',
-          'email': userCredential.user!.email ?? '',
-          'photoURL': userCredential.user!.photoURL,
-          'createdAt': FieldValue.serverTimestamp(),
-          'isGuest': false,
-          'signInMethod': 'google',
-        });
+      // Save user data to Firestore (with error handling)
+      try {
+        // Check if this is a new user
+        final isNewUser = userCredential.additionalUserInfo?.isNewUser ?? false;
+
+        if (isNewUser) {
+          // Create new user document for new users
+          await _firestore
+              .collection('users')
+              .doc(userCredential.user!.uid)
+              .set({
+                'name': userCredential.user!.displayName ?? 'User',
+                'email': userCredential.user!.email ?? '',
+                'photoURL': userCredential.user!.photoURL,
+                'createdAt': FieldValue.serverTimestamp(),
+                'isGuest': false,
+                'signInMethod': 'google',
+              });
+          debugPrint('✅ New Google user created in Firestore');
+        } else {
+          debugPrint('ℹ️ Existing Google user signed in');
+        }
+      } catch (firestoreError) {
+        // Log Firestore error but don't fail the sign-in
+        debugPrint(
+          '⚠️ Failed to save to Firestore (non-critical): $firestoreError',
+        );
       }
 
-      // Save to SharedPreferences
+      // Save to SharedPreferences (always do this regardless of Firestore)
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('name', userCredential.user!.displayName ?? 'User');
       await prefs.setString('email', userCredential.user!.email ?? '');
@@ -154,6 +170,7 @@ class AuthService {
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
     } catch (e) {
+      debugPrint('❌ Google Sign-In Error: $e');
       throw 'Failed to sign in with Google. Please try again.';
     }
   }

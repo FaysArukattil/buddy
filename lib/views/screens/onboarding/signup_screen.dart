@@ -95,7 +95,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Account created successfully! ✅'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.primary,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(16)),
+            ),
             behavior: SnackBarBehavior.floating,
             duration: Duration(milliseconds: 800),
           ),
@@ -119,7 +122,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(e.toString()),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -146,7 +149,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
               ],
             ),
-            backgroundColor: Colors.orange,
+            backgroundColor: AppColors.warning,
             behavior: SnackBarBehavior.floating,
             duration: Duration(seconds: 3),
           ),
@@ -169,7 +172,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Signed in with Google successfully! ✅'),
-            backgroundColor: Colors.green,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(16)),
+            ),
+            backgroundColor: AppColors.primary,
             behavior: SnackBarBehavior.floating,
             duration: Duration(milliseconds: 800),
           ),
