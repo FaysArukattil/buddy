@@ -14,8 +14,14 @@ class AuthWrapper extends StatelessWidget {
     return StreamBuilder<User?>(
       stream: authService.authStateChanges,
       builder: (context, snapshot) {
+        debugPrint(
+          '🔍 AUTH WRAPPER: connectionState=${snapshot.connectionState}, '
+          'hasData=${snapshot.hasData}, user=${snapshot.data?.uid}',
+        );
+
         // Show loading while checking auth state
         if (snapshot.connectionState == ConnectionState.waiting) {
+          debugPrint('⏳ AUTH WRAPPER: Waiting for auth state...');
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
@@ -23,10 +29,12 @@ class AuthWrapper extends StatelessWidget {
 
         // If user is logged in (including guest), show main app
         if (snapshot.hasData) {
+          debugPrint('✅ AUTH WRAPPER: User authenticated, showing home');
           return const BottomNavbarScreen();
         }
 
         // Otherwise show login screen
+        debugPrint('❌ AUTH WRAPPER: No user, showing login');
         return const LoginScreen();
       },
     );

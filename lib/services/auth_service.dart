@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,6 +22,7 @@ class AuthService {
   }
 
   // Sign up with email and password
+  // Sign up with email and password
   Future<UserCredential?> signUpWithEmailPassword({
     required String name,
     required String email,
@@ -34,15 +36,23 @@ class AuthService {
       // Update display name
       await userCredential.user?.updateDisplayName(name);
 
-      // Save user data to Firestore
-      await _firestore.collection('users').doc(userCredential.user!.uid).set({
-        'name': name,
-        'email': email,
-        'createdAt': FieldValue.serverTimestamp(),
-        'isGuest': false,
-      });
+      // Save user data to Firestore (with error handling)
+      try {
+        await _firestore.collection('users').doc(userCredential.user!.uid).set({
+          'name': name,
+          'email': email,
+          'createdAt': FieldValue.serverTimestamp(),
+          'isGuest': false,
+        });
+        debugPrint('✅ User data saved to Firestore');
+      } catch (firestoreError) {
+        // Log Firestore error but don't fail the sign-up
+        debugPrint(
+          '⚠️ Failed to save to Firestore (non-critical): $firestoreError',
+        );
+      }
 
-      // Save to SharedPreferences
+      // Save to SharedPreferences (always do this regardless of Firestore)
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('name', name);
       await prefs.setString('email', email);
@@ -54,6 +64,7 @@ class AuthService {
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
     } catch (e) {
+      debugPrint('❌ SignUp Error: $e');
       throw 'An unexpected error occurred. Please try again.';
     }
   }

@@ -1,4 +1,5 @@
 import 'package:buddy/services/Network_services.dart';
+import 'package:buddy/views/screens/bottomnavbarscreen/bottom_navbar_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:buddy/services/auth_service.dart';
 import 'package:buddy/views/screens/onboarding/login_screen.dart';
@@ -90,18 +91,27 @@ class _SignUpScreenState extends State<SignUpScreen> {
       if (result != null && mounted) {
         debugPrint('🔐 SIGNUP: Account created successfully!');
 
-        // Show success message
+        // Show success message briefly
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Account created successfully! ✅'),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 2),
+            duration: Duration(milliseconds: 800),
           ),
         );
 
-        // Navigation handled by AuthWrapper automatically
-        debugPrint('🔐 SIGNUP: Waiting for AuthWrapper to navigate...');
+        // Wait for Firebase auth state to propagate AND SnackBar to show
+        await Future.delayed(const Duration(milliseconds: 900));
+
+        if (mounted) {
+          // Replace entire stack with fresh AuthWrapper that will show home
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const BottomNavbarScreen()),
+            (route) => false,
+          );
+          debugPrint('🔐 SIGNUP: Navigated to home screen');
+        }
       }
     } catch (e) {
       debugPrint('❌ SIGNUP ERROR: $e');
@@ -161,12 +171,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
             content: Text('Signed in with Google successfully! ✅'),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 2),
+            duration: Duration(milliseconds: 800),
           ),
         );
 
-        // Navigation handled by AuthWrapper
-        debugPrint('🔐 GOOGLE SIGNIN: Waiting for AuthWrapper to navigate...');
+        // Wait for auth state to propagate AND SnackBar to show
+        await Future.delayed(const Duration(milliseconds: 900));
+
+        if (mounted) {
+          // Navigate to home screen directly
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const BottomNavbarScreen()),
+            (route) => false,
+          );
+          debugPrint('🔐 GOOGLE SIGNIN: Navigated to home screen');
+        }
       } else if (mounted) {
         // User cancelled
         ScaffoldMessenger.of(context).showSnackBar(
