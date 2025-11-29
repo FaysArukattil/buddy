@@ -1,3 +1,4 @@
+import 'package:buddy/services/Network_services.dart';
 import 'package:flutter/material.dart';
 import 'package:buddy/services/auth_service.dart';
 import 'package:buddy/views/screens/onboarding/login_screen.dart';
@@ -45,16 +46,65 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Future<void> _handleSignUp() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Check network connectivity
+    final hasNetwork = await NetworkHelper.hasInternetConnection();
+    if (!hasNetwork) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.wifi_off, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'No internet connection. Please check your network.',
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
-      await _authService.signUpWithEmailPassword(
+      debugPrint('🔐 SIGNUP: Starting signup process...');
+
+      final result = await _authService.signUpWithEmailPassword(
         name: _nameController.text.trim(),
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      // Navigation handled by AuthWrapper
+
+      debugPrint(
+        '🔐 SIGNUP: Firebase signup complete, result: ${result != null}',
+      );
+
+      if (result != null && mounted) {
+        debugPrint('🔐 SIGNUP: Account created successfully!');
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Account created successfully! ✅'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+
+        // Navigation handled by AuthWrapper automatically
+        debugPrint('🔐 SIGNUP: Waiting for AuthWrapper to navigate...');
+      }
     } catch (e) {
+      debugPrint('❌ SIGNUP ERROR: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -63,19 +113,73 @@ class _SignUpScreenState extends State<SignUpScreen> {
             behavior: SnackBarBehavior.floating,
           ),
         );
+        setState(() => _isLoading = false);
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _handleGoogleSignIn() async {
+    // Check network connectivity
+    final hasNetwork = await NetworkHelper.hasInternetConnection();
+    if (!hasNetwork) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.wifi_off, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'No internet connection. Please check your network.',
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
-      await _authService.signInWithGoogle();
-      // Navigation handled by AuthWrapper
+      debugPrint('🔐 GOOGLE SIGNIN: Starting...');
+
+      final result = await _authService.signInWithGoogle();
+
+      debugPrint('🔐 GOOGLE SIGNIN: Complete, result: ${result != null}');
+
+      if (result != null && mounted) {
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Signed in with Google successfully! ✅'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+
+        // Navigation handled by AuthWrapper
+        debugPrint('🔐 GOOGLE SIGNIN: Waiting for AuthWrapper to navigate...');
+      } else if (mounted) {
+        // User cancelled
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sign-in cancelled'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() => _isLoading = false);
+      }
     } catch (e) {
+      debugPrint('❌ GOOGLE SIGNIN ERROR: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -84,9 +188,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
             behavior: SnackBarBehavior.floating,
           ),
         );
+        setState(() => _isLoading = false);
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -216,11 +319,47 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
                   const SizedBox(height: 32),
 
-                  CustomButtonFilled(
-                    text: _isLoading ? "Creating Account..." : "Sign Up",
-                    onPressed: _isLoading ? () {} : _handleSignUp,
-                    borderRadius: 16,
-                  ),
+                  // Sign Up Button with Loading Indicator
+                  _isLoading
+                      ? Container(
+                          width: double.infinity,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.7),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Center(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 12),
+                                Text(
+                                  'Creating Account...',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : CustomButtonFilled(
+                          text: "Sign Up",
+                          onPressed: _handleSignUp,
+                          borderRadius: 16,
+                        ),
 
                   const SizedBox(height: 24),
 

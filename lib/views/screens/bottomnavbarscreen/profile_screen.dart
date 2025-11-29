@@ -32,7 +32,8 @@ class ProfileScreenState extends State<ProfileScreen>
   String? _customImagePath; // Local file path for custom image
   String? _googlePhotoUrl; // Google account photo URL
   bool _editing = false;
-  bool _uploadingImage = false;
+  // ignore: unused_field
+  final bool _uploadingImage = false;
   double _totalIncome = 0;
   double _totalExpense = 0;
   double _moneyLottieDy = 0;
@@ -68,16 +69,16 @@ class ProfileScreenState extends State<ProfileScreen>
       final prefs = await SharedPreferences.getInstance();
       final user = FirebaseAuth.instance.currentUser;
 
-      print('=== Loading Profile ===');
-      print('User: ${user?.email}');
-      print('Google Photo: ${user?.photoURL}');
+      debugPrint('=== Loading Profile ===');
+      debugPrint('User: ${user?.email}');
+      debugPrint('Google Photo: ${user?.photoURL}');
 
       // Load saved data
       final savedName = prefs.getString('name');
       final customImagePath = prefs.getString('profile_image_path');
 
-      print('Saved Name: $savedName');
-      print('Custom Image Path: $customImagePath');
+      debugPrint('Saved Name: $savedName');
+      debugPrint('Custom Image Path: $customImagePath');
 
       // Validate custom image path if it exists
       String? validCustomPath;
@@ -85,10 +86,10 @@ class ProfileScreenState extends State<ProfileScreen>
         final file = File(customImagePath);
         if (await file.exists()) {
           validCustomPath = customImagePath;
-          print('Custom image file exists');
+          debugPrint('Custom image file exists');
         } else {
           await prefs.remove('profile_image_path');
-          print('Custom image file not found, removed from preferences');
+          debugPrint('Custom image file not found, removed from preferences');
         }
       }
 
@@ -138,12 +139,12 @@ class ProfileScreenState extends State<ProfileScreen>
           _totalIncome = income;
           _totalExpense = expense;
         });
-        print(
+        debugPrint(
           'Profile loaded - Custom: $_customImagePath, Google: $_googlePhotoUrl',
         );
       }
     } catch (e) {
-      print('Error loading profile: $e');
+      debugPrint('Error loading profile: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -168,13 +169,13 @@ class ProfileScreenState extends State<ProfileScreen>
 
       if (picked == null) return;
 
-      print('=== Image Picked ===');
-      print('Path: ${picked.path}');
+      debugPrint('=== Image Picked ===');
+      debugPrint('Path: ${picked.path}');
 
       // Verify file exists
       final file = File(picked.path);
       final exists = await file.exists();
-      print('File exists: $exists');
+      debugPrint('File exists: $exists');
 
       if (exists) {
         // Save to SharedPreferences
@@ -183,7 +184,7 @@ class ProfileScreenState extends State<ProfileScreen>
 
         // Verify it was saved
         final savedPath = prefs.getString('profile_image_path');
-        print('Verified saved path: $savedPath');
+        debugPrint('Verified saved path: $savedPath');
 
         if (mounted) {
           setState(() => _customImagePath = picked.path);
@@ -204,7 +205,7 @@ class ProfileScreenState extends State<ProfileScreen>
         throw Exception('Picked file does not exist');
       }
     } catch (e) {
-      print('Error picking image: $e');
+      debugPrint('Error picking image: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -227,7 +228,7 @@ class ProfileScreenState extends State<ProfileScreen>
         backgroundColor: Colors.grey[100],
         backgroundImage: FileImage(File(_customImagePath!)),
         onBackgroundImageError: (exception, stackTrace) {
-          print('Error loading custom image: $exception');
+          debugPrint('Error loading custom image: $exception');
         },
       );
     }
@@ -239,7 +240,7 @@ class ProfileScreenState extends State<ProfileScreen>
         backgroundColor: Colors.grey[100],
         backgroundImage: NetworkImage(_googlePhotoUrl!),
         onBackgroundImageError: (exception, stackTrace) {
-          print('Error loading Google photo: $exception');
+          debugPrint('Error loading Google photo: $exception');
         },
       );
     }
