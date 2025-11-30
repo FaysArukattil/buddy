@@ -6,20 +6,22 @@
   ![Flutter](https://img.shields.io/badge/Flutter-3.9.2+-02569B?logo=flutter)
   ![Dart](https://img.shields.io/badge/Dart-3.9.2+-0175C2?logo=dart)
   ![Platform](https://img.shields.io/badge/Platform-Android-brightgreen)
+  ![Firebase](https://img.shields.io/badge/Firebase-Authentication-orange?logo=firebase)
   
   **Your intelligent companion for effortless expense management**
   
-  [Features](#-features) • [Installation](#️-installation) • [Architecture](#️-architecture) • [Screenshots](#-screenshots) • [Contributing](#-contributing)
+  [Features](#-features) • [Installation](#️-installation) • [Architecture](#️-architecture) • [Authentication](#-authentication) • [Screenshots](#-screenshots) • [Contributing](#-contributing)
 </div>
 
 ---
 
 ## 📖 About
 
-Buddy is a modern, feature-rich expense tracker app built with Flutter that revolutionizes personal finance management through intelligent automation. With advanced notification parsing and background processing, Buddy automatically captures your transactions from SMS and UPI notifications - even when the app is closed - making expense tracking truly effortless.
+Buddy is a modern, feature-rich expense tracker app built with Flutter that revolutionizes personal finance management through intelligent automation. With advanced notification parsing, background processing, and secure Firebase authentication, Buddy automatically captures your transactions from SMS and UPI notifications - even when the app is closed - making expense tracking truly effortless.
 
 ## 🎯 Key Highlights
 
+- 🔐 **Secure Authentication**: Firebase-powered sign-in with Google, Email/Password, and Anonymous modes
 - 🤖 **Smart Auto-Detection**: Automatically extracts transaction data from SMS/UPI notifications using advanced regex patterns
 - 📱 **Background Processing**: Captures transactions even when the app is closed via native Android service
 - 🔄 **Intelligent Deduplication**: Prevents duplicate entries with hash-based comparison and user confirmation
@@ -31,6 +33,16 @@ Buddy is a modern, feature-rich expense tracker app built with Flutter that revo
 ---
 
 ## ✨ Features
+
+### 🔐 Authentication & Security
+
+| Feature | Description |
+|---------|-------------|
+| **Google Sign-In** | Quick and secure authentication using your Google account |
+| **Email/Password** | Traditional sign-up and login with email verification |
+| **Anonymous Sign-In** | Try the app instantly without creating an account |
+| **Secure Sessions** | Firebase handles token management and session security |
+| **Easy Account Linking** | Convert anonymous accounts to permanent accounts later |
 
 ### 🚀 Core Features
 
@@ -63,7 +75,7 @@ Buddy is a modern, feature-rich expense tracker app built with Flutter that revo
 ### 🎨 User Experience
 
 - **Glassmorphism Design**: Modern, translucent UI elements
-- **Smooth Animations**: Polished transitions and micro-interactions
+- **Smooth Animations**: Polished transitions and micro-interactions with Lottie
 - **Gesture Controls**: Swipe navigation between tabs and time periods
 - **Pull to Refresh**: Refresh data with intuitive pull gesture
 - **Dark Mode Ready**: Adaptive color scheme (customizable)
@@ -79,14 +91,15 @@ Buddy is a modern, feature-rich expense tracker app built with Flutter that revo
 - Dart SDK: `>=3.9.2`
 - Android Studio or VS Code
 - Android device/emulator (API level 21+)
+- Firebase account (for authentication)
 
 ### Steps
 
 1. **Clone the repository**
 
 ```bash
-git clone https://github.com/yourusername/buddy-expense-tracker.git
-cd buddy-expense-tracker
+git clone https://github.com/FaysArukattil/faysarukattil-buddy.git
+cd faysarukattil-buddy
 ```
 
 2. **Install dependencies**
@@ -95,22 +108,46 @@ cd buddy-expense-tracker
 flutter pub get
 ```
 
-3. **Configure Android permissions**
+3. **Firebase Setup**
 
-Ensure these permissions are in `android/app/src/main/AndroidManifest.xml`:
+   a. Create a Firebase project at [Firebase Console](https://console.firebase.google.com/)
+   
+   b. Add an Android app to your Firebase project
+   
+   c. Download `google-services.json` and place it in `android/app/`
+   
+   d. Enable Authentication methods in Firebase Console:
+      - Go to Authentication → Sign-in method
+      - Enable **Google**, **Email/Password**, and **Anonymous**
+   
+   e. For Google Sign-In, add your SHA-1 certificate fingerprint:
+   
+   ```bash
+   # Get your SHA-1
+   keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android
+   ```
+   
+   Add the SHA-1 in Firebase Console → Project Settings → Your apps → SHA certificate fingerprints
+
+4. **Configure Android permissions**
+
+The required permissions are already configured in `android/app/src/main/AndroidManifest.xml`:
 
 ```xml
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"/>
+<uses-permission android:name="android.permission.INTERNET"/>
+<uses-permission android:name="android.permission.RECEIVE_SMS"/>
+<uses-permission android:name="android.permission.READ_SMS"/>
 ```
 
-4. **Run the app**
+5. **Run the app**
 
 ```bash
 flutter run
 ```
 
-5. **Enable notification access**
+6. **Enable notification access**
    - Navigate to Settings → Notification Access
    - Find "Buddy" and toggle it ON
    - This allows the app to read SMS/UPI notifications
@@ -123,67 +160,295 @@ flutter run
 
 ```
 lib/
-├── main.dart                          # App entry point with initialization
+├── main.dart                          # App entry point with Firebase initialization
+├── firebase_options.dart              # Auto-generated Firebase configuration
+│
 ├── models/                            # Data models
 │   ├── transaction.dart              # Transaction model with auto-detection support
-│   ├── category.dart                 # Category model
+│   ├── category.dart                 # Category model for categorization
 │   └── bill.dart                     # Bill/recurring payment model
-├── services/                          # Business logic & services
+│
+├── services/                          # Business logic & core services
+│   ├── auth_service.dart             # Firebase authentication logic
 │   ├── notification_service.dart     # Notification listener & parser
 │   ├── notification_helper.dart      # Local notification manager
 │   ├── transaction_sync_helper.dart  # Background to foreground sync
-│   ├── app_init_helper.dart         # App initialization & lifecycle
-│   ├── db_helper.dart               # SQLite database operations
-│   └── pdf_service.dart             # PDF generation & export
+│   ├── app_init_helper.dart          # App initialization & lifecycle
+│   ├── db_helper.dart                # SQLite database operations
+│   ├── pdf_service.dart              # PDF generation & export
+│   └── Network_services.dart         # Network connectivity checks
+│
 ├── repositories/                      # Data access layer
 │   └── transaction_repository.dart   # Transaction CRUD operations
+│
 ├── views/
-│   ├── screens/                      # UI screens
-│   │   ├── onboarding/              # Splash, login, signup
-│   │   ├── bottomnavbarscreen/      # Main app screens (home, stats, profile)
-│   │   ├── add_transaction_screen.dart
-│   │   ├── transaction_detail_screen.dart
-│   │   └── filtered_transactions_screen.dart
-│   └── widgets/                      # Reusable UI components
+│   ├── screens/                      # Application screens
+│   │   ├── onboarding/              # Onboarding flow
+│   │   │   ├── splashscreen/
+│   │   │   │   └── splash_screen.dart
+│   │   │   ├── auth_wrapper.dart
+│   │   │   ├── login_screen.dart
+│   │   │   ├── signup_screen.dart
+│   │   │   └── onborading_screen.dart
+│   │   │
+│   │   ├── bottomnavbarscreen/      # Main app screens
+│   │   │   ├── bottom_navbar_screen.dart  # Main navigation container
+│   │   │   ├── home_screen.dart           # Home screen
+│   │   │   ├── statistics_screen.dart     # Analytics & charts
+│   │   │   └── profile_screen.dart        # User profile & settings
+│   │   │
+│   │   ├── add_transaction_screen.dart        # Manual transaction entry
+│   │   ├── filtered_transactions_screen.dart  # Filtered transaction list
+│   │   └── transaction_detail_screen.dart     # Transaction details view
+│   │
+│   └── widgets/                      # Screen-specific widgets
+│       ├── auth_textfield.dart       # Custom text field for auth
+│       ├── balance_card.dart         # Balance display card
+│       ├── custom_button_filled.dart # Primary button
+│       ├── custom_button_outlined.dart # Secondary button
+│       ├── setting_modal.dart        # Settings modal dialog
+│       └── transaction_card.dart     # Transaction list item
+│
+├── widgets/                          # Shared widgets
+│   └── animated_money_text.dart      # Animated currency display
+│
 └── utils/                            # Utilities & constants
     ├── colors.dart                   # App color scheme
-    ├── format_utils.dart            # Currency & date formatting
-    └── images.dart                   # Asset paths
+    ├── format_utils.dart             # Currency & date formatting
+    ├── images.dart                   # Asset paths & image utilities
+    ├── budget_manager.dart           # Budget tracking logic
+    ├── export_manager.dart           # Data export utilities
+    └── notification_test_helper.dart # Testing utilities for notifications
+
+android/
+└── app/src/main/kotlin/com/example/buddy/
+    ├── MainActivity.kt                    # Flutter activity
+    ├── NotificationListener.kt            # Background notification service
+    ├── NotificationActionReciever.kt      # Handles notification actions
+    ├── BootReciever.kt                    # Starts service on device boot
+    └── DuplicateConfirmationActivity.kt   # Handles duplicate confirmations
+
+assets/
+├── icon/                             # App icons
+├── images/                           # Static images
+└── lottie/
+    └── jsonlottie/                   # Lottie animation files
+        ├── Coinlottie.json
+        └── Moneylottie.json
 ```
 
 ### Key Components
 
-#### 1. Notification Service (`notification_service.dart`)
+#### 1. Authentication Service (`auth_service.dart`)
 
-- Listens to system notifications via `notification_listener_service` package
+Manages all Firebase authentication operations:
+- Google Sign-In integration
+- Email/password authentication
+- Anonymous user sessions
+- Account linking functionality
+- Authentication state monitoring
+
+#### 2. Notification System
+
+**NotificationListener.kt** (Android Native):
+- Listens to system notifications via Android NotificationListenerService
 - Parses transaction data using regex patterns
-- Identifies income vs expense transactions
-- Extracts amount, merchant, and transaction type
-- Runs continuously in background via native Android service
+- Stores data in SharedPreferences for Flutter access
+- Runs continuously in background
 
-#### 2. Transaction Sync (`transaction_sync_helper.dart`)
+**notification_service.dart** (Flutter):
+- Bridges Android service with Flutter app
+- Manages notification permissions
+- Handles notification parsing logic
 
-- Syncs transactions from native SharedPreferences to SQLite
-- Handles app resume lifecycle to fetch pending transactions
+**notification_helper.dart**:
+- Shows local notifications for confirmations
+- Handles user interactions with notifications
+
+#### 3. Transaction Sync (`transaction_sync_helper.dart`)
+
+- Syncs transactions from SharedPreferences to SQLite on app resume
 - Prevents duplicate processing with hash-based comparison
 - Batches operations for performance
+- Manages app lifecycle events
 
-#### 3. Database Layer (`db_helper.dart`)
+#### 4. Database Layer (`db_helper.dart`)
 
-- SQLite database with indexed queries for performance
+- SQLite database with indexed queries
 - Auto-migration support for schema changes
 - Transaction deduplication using notification hash
 - Efficient timestamp-based filtering
+- User-specific data isolation
 
-#### 4. Smart Parsing Algorithm
+#### 5. Native Android Components
+
+**BootReceiver.kt**: Automatically starts notification listener service on device boot
+
+**NotificationActionReceiver.kt**: Handles actions from notification buttons
+
+**DuplicateConfirmationActivity.kt**: Shows UI for duplicate transaction confirmation
+
+#### 6. Smart Parsing Algorithm
+
+The app uses sophisticated regex patterns to extract transaction information:
 
 ```dart
-// Example of transaction parsing logic
+// Example parsing patterns
 RegExp debitRegex = RegExp(r'\b(debited|spent|purchase|paid)\b');
 RegExp creditRegex = RegExp(r'\b(credited|received|deposit)\b');
 RegExp amountRegex = RegExp(r'(?:Rs\.?|₹)\s?([0-9,]+\.?[0-9]*)');
+```
 
-// Extracts: amount, type (income/expense), category, merchant
+Extracts: amount, type (income/expense), category, merchant, and timestamp.
+
+---
+
+## 🔐 Authentication
+
+Buddy uses **Firebase Authentication** to provide secure, flexible sign-in options.
+
+### Supported Authentication Methods
+
+#### 1. 🔵 Google Sign-In
+
+One-tap authentication using your Google account.
+
+**Implementation Details:**
+- Uses `google_sign_in` package for native Google authentication
+- Automatically retrieves user profile information (name, email, photo)
+- Provides seamless sign-in experience with no manual data entry
+
+**User Flow:**
+```
+User taps "Sign in with Google" 
+→ Google account picker appears 
+→ User selects account 
+→ Instant authentication 
+→ Redirect to home screen
+```
+
+#### 2. 📧 Email/Password Sign-In
+
+Traditional authentication with email and password.
+
+**Features:**
+- **Sign Up**: Create new account with email validation
+- **Sign In**: Secure login with encrypted password
+- **Password Reset**: Email-based password recovery
+- **Email Verification**: Optional email verification for added security
+
+**User Flow:**
+```
+New User: Enter email & password → Create account → Verify email (optional) → Sign in
+Existing User: Enter credentials → Authenticate → Redirect to home screen
+Forgot Password: Enter email → Receive reset link → Set new password
+```
+
+#### 3. 👤 Anonymous Sign-In
+
+Try the app instantly without creating an account.
+
+**Features:**
+- **Instant Access**: Start using the app immediately
+- **Local Data**: All transactions saved locally
+- **Account Upgrade**: Convert to permanent account later
+- **Privacy First**: No personal information required
+
+**User Flow:**
+```
+User taps "Continue as Guest" 
+→ Anonymous session created instantly 
+→ Full app access 
+→ Optional: Convert to permanent account later
+```
+
+### Security Features
+
+- **Encrypted Passwords**: All passwords hashed and encrypted by Firebase
+- **Secure Token Management**: Firebase handles session tokens automatically
+- **Auto Session Refresh**: Tokens refreshed automatically for seamless experience
+- **Secure Sign Out**: Complete session termination on logout
+- **Account Linking**: Upgrade anonymous accounts without data loss
+
+### Account Management
+
+Users can:
+- View current authentication method in Profile screen
+- Sign out from any device
+- Delete account (removes all cloud data)
+- Link anonymous account to permanent email/Google account
+- Change password (for email/password accounts)
+- Update profile information (name, photo)
+
+---
+
+## 🚀 How It Works
+
+### Auto-Detection Flow
+
+```mermaid
+sequenceDiagram
+    participant SMS as SMS/UPI App
+    participant NS as Notification Listener (Kotlin)
+    participant SP as SharedPreferences
+    participant TS as Transaction Sync Helper
+    participant DB as SQLite Database
+    participant UI as Flutter UI
+
+    SMS->>NS: New notification received
+    NS->>NS: Parse with regex patterns
+    NS->>NS: Extract transaction data
+    NS->>SP: Store temporarily as JSON
+    
+    UI->>TS: App resumes
+    TS->>SP: Check for unsynced transactions
+    SP->>TS: Return transaction data
+    TS->>DB: Check for duplicates (hash)
+    
+    alt Duplicate Found
+        TS->>UI: Show confirmation dialog
+        UI->>TS: User confirms/rejects
+        TS->>DB: Insert if confirmed
+    else No Duplicate
+        TS->>DB: Insert transaction
+    end
+    
+    TS->>SP: Clear synced data
+    TS->>UI: Notify data changed
+    UI->>DB: Refresh display
+```
+
+### Data Sync on App Resume
+
+The `transaction_sync_helper.dart` automatically syncs pending transactions when the app resumes from background.
+
+---
+
+## 🎯 Supported Transaction Formats
+
+Buddy intelligently parses various transaction notification formats:
+
+### UPI Transactions
+
+```
+✅ Rs.500 debited from your A/c for UPI transaction
+✅ You paid Rs.1,250 to AMAZON via PhonePe
+✅ ₹350 sent to John Doe via Google Pay
+```
+
+### Bank SMS
+
+```
+✅ Your A/C XX1234 debited by Rs.2,000 on 01-Jan-2025
+✅ A/C XX5678 credited with Rs.5,000 towards Salary
+✅ INR 750.00 debited for online purchase
+```
+
+### Wallet Notifications
+
+```
+✅ Paytm: Rs.200 paid to Swiggy
+✅ PhonePe: You received Rs.500 from Jane
 ```
 
 ---
@@ -206,19 +471,23 @@ RegExp amountRegex = RegExp(r'(?:Rs\.?|₹)\s?([0-9,]+\.?[0-9]*)');
       <td><img src="screenshots/add_transaction.jpeg" width="250" alt="Add Transaction"/></td>
       <td><img src="screenshots/Transaction_detail.jpeg" width="250" alt="Transaction Detail"/></td>
       <td><img src="screenshots/settings.jpeg" width="250" alt="Settings"/></td>
-      <td><img src="screenshots/all_transaction.jpeg" width="250" alt="Settings"/></td>
     </tr>
     <tr>
       <td align="center"><b>Add Transaction</b></td>
       <td align="center"><b>Details View</b></td>
       <td align="center"><b>Settings</b></td>
-            <td align="center"><b>All Transactions</b></td>
+    </tr>
+    <tr>
+      <td><img src="screenshots/all_transaction.jpeg" width="250" alt="All Transactions"/></td>
+    </tr>
+    <tr>
+      <td align="center"><b>All Transactions</b></td>
     </tr>
   </table>
 </div>
 
 ---
-S
+
 ## 📦 Dependencies
 
 ### Core Dependencies
@@ -226,14 +495,22 @@ S
 ```yaml
 flutter: sdk
 sqflite: ^2.3.3              # Local SQLite database
-shared_preferences: ^2.5.3    # Key-value storage
+shared_preferences: ^2.5.3    # Key-value storage for temp data
 path_provider: ^2.1.3         # File system paths
+```
+
+### Firebase & Authentication
+
+```yaml
+firebase_core: ^3.8.1         # Firebase initialization
+firebase_auth: ^5.3.3         # Firebase authentication
+google_sign_in: ^6.2.2        # Google Sign-In integration
 ```
 
 ### UI & Visualization
 
 ```yaml
-fl_chart: ^0.68.0            # Beautiful charts
+fl_chart: ^0.68.0            # Beautiful charts for analytics
 lottie: ^3.3.2               # Animated illustrations
 image_picker: ^1.1.2         # Profile picture selection
 ```
@@ -267,11 +544,19 @@ path: ^1.9.1                # Path manipulation
 
 ## 🔧 Configuration
 
-### Android Setup
+### Firebase Configuration
 
-#### 1. Notification Listener Service
+The project includes auto-generated `firebase_options.dart` for Firebase initialization. Ensure you have:
 
-Add service declaration in `AndroidManifest.xml`:
+1. Added your `google-services.json` to `android/app/`
+2. Configured Firebase Authentication in the console
+3. Added SHA-1 fingerprint for Google Sign-In
+
+### Android Configuration
+
+#### Notification Listener Service
+
+The `NotificationListener.kt` service is already configured in `AndroidManifest.xml`:
 
 ```xml
 <service
@@ -284,23 +569,19 @@ Add service declaration in `AndroidManifest.xml`:
 </service>
 ```
 
-#### 2. Permissions
+#### Boot Receiver
+
+Automatically starts the service on device boot:
 
 ```xml
-<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-<uses-permission android:name="android.permission.RECEIVE_SMS"/>
-<uses-permission android:name="android.permission.READ_SMS"/>
-```
-
-#### 3. Background Execution
-
-```xml
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-<uses-permission android:name="android.permission.WAKE_LOCK"/>
-```
-
----
-
+<receiver
+    android:name=".BootReciever"
+    android:enabled="true"
+    android:exported="true">
+    <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+    </intent-filter>
+</receiver>
 ## 🚀 How It Works
 
 ### Auto-Detection Flow
@@ -377,6 +658,7 @@ Buddy intelligently parses various transaction notification formats:
 ✅ Paytm: Rs.200 paid to Swiggy
 ✅ PhonePe: You received Rs.500 from Jane
 ```
+```
 
 ---
 
@@ -408,34 +690,35 @@ git push origin feature/amazing-feature
 
 ### Development Guidelines
 
-- Follow Flutter style guide
+- Follow Flutter/Dart style guide
 - Write meaningful commit messages
 - Add comments for complex logic
 - Test on multiple devices before PR
 - Update documentation if needed
+- Test authentication flows thoroughly
+- Ensure Firebase configuration is documented
+- Test background service functionality
 
 ---
 
-## 🐛 Known Issues
+## 🐛 Known Issues & Limitations
 
-- Background service may stop on aggressive battery optimization (solution: disable battery optimization for app)
-- Some banking apps use encrypted notifications that cannot be parsed but the transactions can still be detected from the messages.
+- Background service may stop on aggressive battery optimization (disable battery optimization for the app)
+- Some banking apps use encrypted notifications that cannot be parsed
 - Notification format variations may require regex pattern updates
+- Google Sign-In requires valid SHA-1 certificate fingerprint in Firebase Console
 
 ---
 
 
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
 ## 🙏 Acknowledgments
 
+- [Firebase](https://firebase.google.com/) for authentication and backend services
 - [FL Chart](https://github.com/imaNNeoFighT/fl_chart) for beautiful charts
-- [Lottie](https://github.com/airbnb/lottie-android) for animations
+- [Lottie](https://airbnb.design/lottie/) for animations
 - [Material Design](https://material.io/) for design guidelines
 - Flutter Community for support and resources
 
@@ -458,5 +741,5 @@ If you found this project helpful, please give it a ⭐ on GitHub!
 ---
 
 <div align="center">
-  <sub>Built with ❤️ using Flutter</sub>
+  <sub>Built with ❤️ using Flutter & Firebase</sub>
 </div>
