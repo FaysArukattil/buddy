@@ -78,15 +78,39 @@ class AuthService {
       final UserCredential userCredential = await _auth
           .signInWithEmailAndPassword(email: email, password: password);
 
-      // Get user data from Firestore
-      final userDoc = await _firestore
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .get();
-
-      // Save to SharedPreferences
+      // Determine fallback name priority:
+      // 1. Firebase Auth displayName (most reliable)
+      // 2. Existing SharedPreferences
+      // 3. 'User' as last resort
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('name', userDoc.data()?['name'] ?? 'User');
+      String fallbackName = userCredential.user?.displayName ?? 
+                           prefs.getString('name') ?? 
+                           'User';
+
+      // Get user data from Firestore (with error handling - non-critical)
+      String userName = fallbackName;
+      try {
+        final userDoc = await _firestore
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .get();
+        
+        if (userDoc.exists && userDoc.data()?['name'] != null) {
+          userName = userDoc.data()!['name'];
+          debugPrint('✅ User data fetched from Firestore: $userName');
+        } else {
+          debugPrint('⚠️ Firestore doc missing or no name, using fallback: $fallbackName');
+        }
+      } catch (firestoreError) {
+        // Log Firestore error but don't fail the sign-in
+        debugPrint(
+          '⚠️ Failed to fetch from Firestore (non-critical): $firestoreError',
+        );
+        debugPrint('ℹ️ Using fallback username: $fallbackName');
+      }
+
+      // Save to SharedPreferences (always do this regardless of Firestore)
+      await prefs.setString('name', userName);
       await prefs.setString('email', email);
       await prefs.setBool('is_logged_in', true);
       await prefs.setBool('isGuest', false);
@@ -96,6 +120,7 @@ class AuthService {
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
     } catch (e) {
+      debugPrint('❌ SignIn Error: $e');
       throw 'An unexpected error occurred. Please try again.';
     }
   }
@@ -188,17 +213,26 @@ class AuthService {
       await prefs.setBool('isGuest', true);
       await prefs.setString('userId', userCredential.user!.uid);
 
-      // Save minimal data to Firestore
-      await _firestore.collection('users').doc(userCredential.user!.uid).set({
-        'name': 'Guest User',
-        'isGuest': true,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      // Save minimal data to Firestore (with error handling - non-critical)
+      try {
+        await _firestore.collection('users').doc(userCredential.user!.uid).set({
+          'name': 'Guest User',
+          'isGuest': true,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        debugPrint('✅ Guest user data saved to Firestore');
+      } catch (firestoreError) {
+        // Log Firestore error but don't fail the sign-in
+        debugPrint(
+          '⚠️ Failed to save to Firestore (non-critical): $firestoreError',
+        );
+      }
 
       return userCredential;
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
     } catch (e) {
+      debugPrint('❌ Guest SignIn Error: $e');
       throw 'Failed to continue as guest. Please try again.';
     }
   }

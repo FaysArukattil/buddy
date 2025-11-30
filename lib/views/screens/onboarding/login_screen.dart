@@ -2,6 +2,7 @@ import 'package:buddy/services/Network_services.dart';
 import 'package:flutter/material.dart';
 import 'package:buddy/services/auth_service.dart';
 import 'package:buddy/views/screens/onboarding/signup_screen.dart';
+import 'package:buddy/views/screens/bottomnavbarscreen/bottom_navbar_screen.dart';
 import 'package:buddy/utils/colors.dart';
 import 'package:buddy/views/widgets/custom_button_filled.dart';
 import 'package:buddy/views/widgets/custom_button_outlined.dart';
@@ -66,17 +67,29 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (result != null && mounted) {
+        debugPrint('🔐 LOGIN: Login successful!');
+
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Logged in successfully! ✅'),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 1),
+            duration: Duration(milliseconds: 800),
           ),
         );
 
-        // Navigation handled by AuthWrapper automatically
+        // Wait for auth state to propagate AND SnackBar to show
+        await Future.delayed(const Duration(milliseconds: 900));
+
+        if (mounted) {
+          // Navigate to home screen directly (matching SignUpScreen pattern)
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const BottomNavbarScreen()),
+            (route) => false,
+          );
+          debugPrint('🔐 LOGIN: Navigated to home screen');
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -125,20 +138,29 @@ class _LoginScreenState extends State<LoginScreen> {
       final result = await _authService.signInWithGoogle();
 
       if (result != null && mounted) {
+        debugPrint('🔐 GOOGLE SIGNIN: Login successful!');
+
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Signed in with Google successfully! ✅'),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 2),
+            duration: Duration(milliseconds: 800),
           ),
         );
 
-        // Wait a moment for the message to show
-        await Future.delayed(const Duration(milliseconds: 500));
+        // Wait for auth state to propagate AND SnackBar to show
+        await Future.delayed(const Duration(milliseconds: 900));
 
-        // Navigation handled by AuthWrapper
+        if (mounted) {
+          // Navigate to home screen directly (matching SignUpScreen pattern)
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const BottomNavbarScreen()),
+            (route) => false,
+          );
+          debugPrint('🔐 GOOGLE SIGNIN: Navigated to home screen');
+        }
       } else if (mounted) {
         // User cancelled the sign-in
         ScaffoldMessenger.of(context).showSnackBar(
@@ -171,20 +193,29 @@ class _LoginScreenState extends State<LoginScreen> {
       final result = await _authService.signInAsGuest();
 
       if (result != null && mounted) {
+        debugPrint('🔐 GUEST LOGIN: Login successful!');
+
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Continuing as guest ✅'),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 1),
+            duration: Duration(milliseconds: 800),
           ),
         );
 
-        // Wait a moment for the message to show
-        await Future.delayed(const Duration(milliseconds: 500));
+        // Wait for auth state to propagate AND SnackBar to show
+        await Future.delayed(const Duration(milliseconds: 900));
 
-        // Navigation handled by AuthWrapper
+        if (mounted) {
+          // Navigate to home screen directly (matching SignUpScreen pattern)
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const BottomNavbarScreen()),
+            (route) => false,
+          );
+          debugPrint('🔐 GUEST LOGIN: Navigated to home screen');
+        }
       }
     } catch (e) {
       if (mounted) {
