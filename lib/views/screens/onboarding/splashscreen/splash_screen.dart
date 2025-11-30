@@ -3,7 +3,9 @@
 import 'package:flutter/material.dart';
 import 'package:buddy/utils/colors.dart';
 import 'package:buddy/views/screens/onboarding/auth_wrapper.dart';
+import 'package:buddy/views/screens/onboarding/onborading_screen.dart';
 import 'package:lottie/lottie.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -34,10 +36,21 @@ class _SplashScreenState extends State<SplashScreen>
 
     if (!mounted) return;
 
+    // Check if user has seen onboarding
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
+
+    // Determine next screen
+    final Widget nextScreen = hasSeenOnboarding 
+        ? const AuthWrapper() 
+        : const OnboardingScreen();
+
+    debugPrint('🚀 SPLASH: hasSeenOnboarding=$hasSeenOnboarding, navigating to ${hasSeenOnboarding ? "AuthWrapper" : "OnboardingScreen"}');
+
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 600),
-        pageBuilder: (_, __, ___) => const AuthWrapper(),
+        pageBuilder: (_, __, ___) => nextScreen,
         transitionsBuilder: (_, animation, __, child) {
           return FadeTransition(opacity: animation, child: child);
         },
@@ -46,7 +59,7 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   @override
-  void dispose() {
+ void dispose() {
     _controller.dispose();
     super.dispose();
   }

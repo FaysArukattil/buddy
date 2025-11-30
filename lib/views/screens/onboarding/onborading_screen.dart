@@ -5,6 +5,7 @@ import 'package:buddy/views/screens/onboarding/signup_screen.dart';
 import 'package:buddy/views/widgets/custom_button_filled.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math' as math;
 
 class OnboardingScreen extends StatefulWidget {
@@ -115,13 +116,20 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     // Get Started Button
                     CustomButtonFilled(
                       text: "Get Started",
-                      onPressed: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => SignUpScreen(),
-                          ),
-                        );
+                      onPressed: () async {
+                        // Mark onboarding as seen
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setBool('has_seen_onboarding', true);
+                        debugPrint('✅ ONBOARDING: Marked as seen, navigating to SignUp');
+                        
+                        if (mounted) {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => SignUpScreen(),
+                            ),
+                          );
+                        }
                       },
                       borderRadius: 40,
                     ),
@@ -139,13 +147,20 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           ),
                         ),
                         GestureDetector(
-                          onTap: () {
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => LoginScreen(),
-                              ),
-                            );
+                          onTap: () async {
+                            // Mark onboarding as seen
+                            final prefs = await SharedPreferences.getInstance();
+                            await prefs.setBool('has_seen_onboarding', true);
+                            debugPrint('✅ ONBOARDING: Marked as seen, navigating to Login');
+                            
+                            if (mounted) {
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => LoginScreen(),
+                                ),
+                              );
+                            }
                           },
                           child: const Text(
                             "Log In",
