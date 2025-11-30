@@ -208,10 +208,8 @@ lib/
 │       ├── custom_button_outlined.dart # Secondary button
 │       ├── setting_modal.dart        # Settings modal dialog
 │       └── transaction_card.dart     # Transaction list item
-│
-├── widgets/                          # Shared widgets
-│   └── animated_money_text.dart      # Animated currency display
-│
+│       └── animated_money_text.dart  # Animated currency display                    
+│     
 └── utils/                            # Utilities & constants
     ├── colors.dart                   # App color scheme
     ├── format_utils.dart             # Currency & date formatting
