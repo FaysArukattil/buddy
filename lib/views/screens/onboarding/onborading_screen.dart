@@ -5,6 +5,7 @@ import 'package:buddy/views/screens/onboarding/signup_screen.dart';
 import 'package:buddy/views/widgets/custom_button_filled.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math' as math;
 
 class OnboardingScreen extends StatefulWidget {
@@ -32,6 +33,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _controller.dispose();
     super.dispose();
   }
+
+  Future<void> _markOnboardingAsSeen() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('has_seen_onboarding', true);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -112,13 +119,17 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     // Get Started Button
                     CustomButtonFilled(
                       text: "Get Started",
-                      onPressed: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => SignUpScreen(),
-                          ),
-                        );
+                      onPressed: () async {
+                        await _markOnboardingAsSeen();
+                        
+                        if (mounted) {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SignUpScreen(),
+                            ),
+                          );
+                        }
                       },
                       borderRadius: 40,
                     ),
@@ -136,13 +147,17 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           ),
                         ),
                         GestureDetector(
-                          onTap: () {
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => LoginScreen(),
-                              ),
-                            );
+                          onTap: () async {
+                            await _markOnboardingAsSeen();
+                            
+                            if (mounted) {
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const LoginScreen(),
+                                ),
+                              );
+                            }
                           },
                           child: const Text(
                             "Log In",
