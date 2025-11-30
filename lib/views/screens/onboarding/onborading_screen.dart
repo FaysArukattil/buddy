@@ -5,7 +5,6 @@ import 'package:buddy/views/screens/onboarding/signup_screen.dart';
 import 'package:buddy/views/widgets/custom_button_filled.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math' as math;
 
 class OnboardingScreen extends StatefulWidget {
@@ -32,11 +31,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   void dispose() {
     _controller.dispose();
     super.dispose();
-  }
-
-  Future<void> _markOnboardingAsSeen() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('has_seen_onboarding', true);
   }
 
   @override
@@ -68,7 +62,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             fit: BoxFit.contain,
                           ),
                           builder: (context, child) {
-                            final wave = math.sin(_controller.value * 2 * math.pi);
+                            final wave = math.sin(
+                              _controller.value * 2 * math.pi,
+                            );
                             final dy = wave * 8.0;
                             final scale = 1.0 + (wave * 0.02);
                             return Transform.translate(
@@ -119,17 +115,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     // Get Started Button
                     CustomButtonFilled(
                       text: "Get Started",
-                      onPressed: () async {
-                        await _markOnboardingAsSeen();
-                        
-                        if (mounted) {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SignUpScreen(),
-                            ),
-                          );
-                        }
+                      onPressed: () {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => SignUpScreen(),
+                          ),
+                        );
                       },
                       borderRadius: 40,
                     ),
@@ -147,17 +139,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           ),
                         ),
                         GestureDetector(
-                          onTap: () async {
-                            await _markOnboardingAsSeen();
-                            
-                            if (mounted) {
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const LoginScreen(),
-                                ),
-                              );
-                            }
+                          onTap: () {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => LoginScreen(),
+                              ),
+                            );
                           },
                           child: const Text(
                             "Log In",
