@@ -21,7 +21,7 @@ Buddy is a modern, feature-rich expense tracker app built with Flutter that revo
 
 ## 🎯 Key Highlights
 
-- 🔐 **Secure Authentication**: Firebase-powered sign-in with Google, Email/Password, and Anonymous modes
+- 🔐 **Secure Authentication**: Firebase-powered sign-in with Google, Email/Password, and Anonymous Signin
 - 🤖 **Smart Auto-Detection**: Automatically extracts transaction data from SMS/UPI notifications using advanced regex patterns
 - 📱 **Background Processing**: Captures transactions even when the app is closed via native Android service
 - 🔄 **Intelligent Deduplication**: Prevents duplicate entries with hash-based comparison and user confirmation
